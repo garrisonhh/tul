@@ -157,12 +157,40 @@ const runtime = struct {
                 const ref = try new(const_obj);
                 frame.push(ref);
             },
+            .inspect => {
+                const obj = get(frame.peek());
+                std.debug.print("[inspect] {}\n", .{obj});
+            },
+
+            // stack manipulation
             .swap => {
                 var refs = frame.popArray(2);
                 std.mem.swap(Object.Ref, &refs[0], &refs[1]);
                 frame.pushAll(&refs);
             },
-            .dup => frame.push(frame.peek()),
+            .dup => {
+                const top = frame.peek();
+                acq(top);
+                frame.push(top);
+            },
+            .over => {
+                const under = frame.peekArray(2)[0];
+                acq(under);
+                frame.push(under);
+            },
+            .rot => {
+                var refs = frame.popArray(3);
+                const tmp = refs[0];
+                refs[0] = refs[1];
+                refs[1] = refs[2];
+                refs[2] = tmp;
+                frame.pushAll(&refs);
+            },
+            .drop => {
+                deacq(frame.pop());
+            },
+
+            // math
             inline .add, .sub, .mul, .div, .mod => |tag| {
                 const refs = frame.popArray(2);
                 defer deacqAll(&refs);
@@ -182,7 +210,6 @@ const runtime = struct {
                 const result = try new(Object{ .int = n });
                 frame.push(result);
             },
-            else => unreachable,
         }
     }
 
