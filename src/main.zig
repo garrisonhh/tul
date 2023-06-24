@@ -1,4 +1,5 @@
 const std = @import("std");
+const com = @import("common");
 const vm = @import("vm.zig");
 const bc = @import("bytecode.zig");
 const Object = @import("object.zig").Object;
@@ -25,17 +26,15 @@ pub fn main() !void {
 
     // make test function
     const consts = [_]Object{
-        Object{ .int = 10 },
+        Object{ .int = 5 },
         Object{ .int = 2 },
-        Object{ .int = 3 },
     };
 
     const code = bc.ct_parse(
         \\ load_const 0
         \\ load_const 1
-        \\ add
-        \\ load_const 2
-        \\ mul
+        \\ swap
+        \\ mod
     );
 
     const owned_consts = try ally.alloc(Object, consts.len);
@@ -51,8 +50,10 @@ pub fn main() !void {
     defer func.deinit(ally);
 
     // run test function
+    const start_time = com.time.now();
     const obj = try vm.run(ally, func);
     defer obj.deinit(ally);
+    const duration = com.time.now() - start_time;
 
-    std.debug.print("main returned:\n{}\n", .{obj});
+    std.debug.print("in {d:.9}s main returned:\n{}\n", .{duration, obj});
 }

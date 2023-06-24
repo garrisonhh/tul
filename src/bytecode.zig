@@ -395,11 +395,36 @@ pub const Frame = struct {
         self.stack.appendAssumeCapacity(ref);
     }
 
-    pub fn pop(self: *Self) Object.Ref {
-        if (in_debug and self.stack.items.len == 0) {
+    pub fn pushAll(self: *Self, refs: []const Object.Ref) void {
+        for (refs) |ref| self.push(ref);
+    }
+
+    fn assertStack(self: Self, num_items: usize) void {
+        if (in_debug and self.stack.items.len < num_items) {
             @panic("stack frame underflow :(");
         }
+    }
 
+    pub fn pop(self: *Self) Object.Ref {
+        self.assertStack(1);
         return self.stack.pop();
+    }
+
+    pub fn popArray(self: *Self, comptime N: comptime_int) [N]Object.Ref {
+        const arr = self.peekArray(N);
+        self.stack.shrinkRetainingCapacity(self.stack.items.len - N);
+        return arr;
+    }
+
+    pub fn peek(self: Self) Object.Ref {
+        self.assertStack(1);
+        return self.stack.getLast();
+    }
+
+    pub fn peekArray(self: Self, comptime N: comptime_int) [N]Object.Ref {
+        self.assertStack(N);
+        var arr: [N]Object.Ref = undefined;
+        @memcpy(&arr, self.stack.items[self.stack.items.len - N..]);
+        return arr;
     }
 };

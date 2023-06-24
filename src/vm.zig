@@ -44,6 +44,48 @@ pub fn new(init: Object) Allocator.Error!Object.Ref {
     return try mem.put(ally, rc);
 }
 
+fn ReturnType(comptime func: anytype) type {
+    return @typeInfo(@TypeOf(func)).Fn.return_type.?;
+}
+
+/// turn `fn(Object.Ref) T` into a version that operates on and returns an array
+/// 
+/// get output with '.f' since returning parametrized function types isn't
+/// currently supported afaik
+fn arrayify(comptime func: anytype) type {
+    return struct {
+        fn f(
+            comptime N: comptime_int,
+            inputs: [N]Object.Ref,
+        ) t: {
+            const R = ReturnType(func);
+            break :t if (R == void) void else [N]R;
+        } {
+            const R = ReturnType(func);
+            if (R == void) {
+                for (inputs) |ref| func(ref);
+                return;
+            } else {
+                var arr: [N]ReturnType(func) = undefined;
+                for (inputs, &arr) |ref, *slot| {
+                    slot.* = func(ref);
+                }
+
+                return arr;
+            }
+        }
+    };
+}
+
+/// turn `fn(Object.Ref) void` into a version that operates on a slice
+fn sliceify(comptime func: fn(Object.Ref) void) fn([]const Object.Ref) void {
+    return struct {
+        fn f(refs: []const Object.Ref) void {
+            for (refs) |ref| func(ref);
+        }
+    }.f;
+}
+
 /// declare ownership; increase object reference count
 pub fn acq(ref: Object.Ref) void {
     const rc = mem.get(ref);
@@ -65,6 +107,13 @@ pub fn deacq(ref: Object.Ref) void {
 pub fn get(ref: Object.Ref) *const Object {
     return &mem.get(ref).obj;
 }
+
+/// see acq
+pub const acqAll = sliceify(acq);
+/// see deacq
+pub const deacqAll = sliceify(deacq);
+/// see get
+pub const getArray = arrayify(get).f;
 
 /// code execution
 const runtime = struct {
@@ -100,27 +149,6 @@ const runtime = struct {
         const frame = frame_p.*;
         const func = frame.func;
 
-        // manage inputs
-        const input_limit = 4;
-        var refs = std.BoundedArray(Object.Ref, input_limit){};
-        var ptrs = std.BoundedArray(*const Object, input_limit){};
-
-        const num_inputs = inst.getMeta(.inputs);
-        std.debug.assert(num_inputs <= input_limit);
-
-        for (0..num_inputs) |_| {
-            const ref = frame.pop();
-            refs.appendAssumeCapacity(ref);
-            ptrs.appendAssumeCapacity(get(ref));
-        }
-
-        defer {
-            // deacq all inputs when done using them
-            for (refs.slice()) |ref| deacq(ref);
-        }
-
-        const inputs = ptrs.slice();
-
         // execute
         switch (inst) {
             .nop => {},
@@ -129,9 +157,18 @@ const runtime = struct {
                 const ref = try new(const_obj);
                 frame.push(ref);
             },
+            .swap => {
+                var refs = frame.popArray(2);
+                std.mem.swap(Object.Ref, &refs[0], &refs[1]);
+                frame.pushAll(&refs);
+            },
+            .dup => frame.push(frame.peek()),
             inline .add, .sub, .mul, .div, .mod => |tag| {
-                const lhs = inputs[0].int;
-                const rhs = inputs[1].int;
+                const refs = frame.popArray(2);
+                defer deacqAll(&refs);
+
+                const lhs = get(refs[0]).int;
+                const rhs = get(refs[1]).int;
 
                 const n = switch (tag) {
                     .add => lhs + rhs,
