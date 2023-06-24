@@ -9,6 +9,28 @@ pub const Inst = enum(u8) {
     const Self = @This();
 
     const Meta = struct {
+        /// tag of the meta type fields
+        const FieldTag = t: {
+            const fields = @typeInfo(Meta).Struct.fields;
+            var tag_fields: [fields.len]std.builtin.Type.EnumField = undefined;
+
+            for (fields, &tag_fields, 0..) |st_field, *e_field, i| {
+                e_field.* = .{
+                    .name = st_field.name,
+                    .value = i,
+                };
+            }
+            
+            break :t @Type(.{
+                .Enum = .{
+                    .tag_type = u8,
+                    .fields = &tag_fields,
+                    .decls = &.{},
+                    .is_exhaustive = true,
+                },
+            });
+        };
+
         /// number of refs popped
         inputs: comptime_int,
         /// number of refs pushed
@@ -47,7 +69,7 @@ pub const Inst = enum(u8) {
     mod,
 
     /// comptime mapping of inst -> metadata
-    pub fn meta(comptime self: Self) Meta {
+    fn meta(comptime self: Self) Meta {
         comptime {
             const m = Meta.of;
             return switch (self) {
@@ -62,6 +84,13 @@ pub const Inst = enum(u8) {
                 .add, .sub, .mul, .div, .mod => m(2, 1, 0),
             };
         }
+    }
+
+    /// get metadata about this instruction
+    pub fn getMeta(self: Self, comptime field: Meta.FieldTag) usize {
+        return switch (self) {
+            inline else => |inst| @field(inst.meta(), @tagName(field)),
+        };
     }
 
     /// canonical way to read bytecode
@@ -115,9 +144,7 @@ pub const Inst = enum(u8) {
             };
 
             // read any consumed bytes
-            const consume_bytes: usize = switch (inst) {
-                inline else => |tag| tag.meta().consumes,
-            };
+            const consume_bytes: usize = inst.getMeta(.consumes);
 
             if (consume_bytes > 0) {
                 var n: usize = 0;

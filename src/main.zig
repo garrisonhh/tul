@@ -25,12 +25,17 @@ pub fn main() !void {
 
     // make test function
     const consts = [_]Object{
-        Object{ .string = "hello, world!" },
+        Object{ .int = 10 },
+        Object{ .int = 2 },
+        Object{ .int = 3 },
     };
 
     const code = bc.ct_parse(
         \\ load_const 0
-        \\ nop
+        \\ load_const 1
+        \\ add
+        \\ load_const 2
+        \\ mul
     );
 
     const owned_consts = try ally.alloc(Object, consts.len);

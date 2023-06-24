@@ -87,7 +87,7 @@ const runtime = struct {
 
     /// removes a frame from the call stack
     fn popFrame() void {
-        const node: *CallStack.Node = call_stack.popFirst().?;
+        const node = call_stack.popFirst().?;
         node.data.deinit(ally);
         ally.destroy(node);
     }
@@ -100,12 +100,50 @@ const runtime = struct {
         const frame = frame_p.*;
         const func = frame.func;
 
+        // manage inputs
+        const input_limit = 4;
+        var refs = std.BoundedArray(Object.Ref, input_limit){};
+        var ptrs = std.BoundedArray(*const Object, input_limit){};
+
+        const num_inputs = inst.getMeta(.inputs);
+        std.debug.assert(num_inputs <= input_limit);
+
+        for (0..num_inputs) |_| {
+            const ref = frame.pop();
+            refs.appendAssumeCapacity(ref);
+            ptrs.appendAssumeCapacity(get(ref));
+        }
+
+        defer {
+            // deacq all inputs when done using them
+            for (refs.slice()) |ref| deacq(ref);
+        }
+
+        const inputs = ptrs.slice();
+
+        // execute
         switch (inst) {
             .nop => {},
             .load_const => {
                 const const_obj = func.consts[consumed];
                 const ref = try new(const_obj);
                 frame.push(ref);
+            },
+            inline .add, .sub, .mul, .div, .mod => |tag| {
+                const lhs = inputs[0].int;
+                const rhs = inputs[1].int;
+
+                const n = switch (tag) {
+                    .add => lhs + rhs,
+                    .sub => lhs - rhs,
+                    .mul => lhs * rhs,
+                    .div => @divTrunc(lhs, rhs),
+                    .mod => @mod(lhs, rhs),
+                    else => unreachable,
+                };
+
+                const result = try new(Object{ .int = n });
+                frame.push(result);
             },
             else => unreachable,
         }
