@@ -30,7 +30,7 @@ pub fn Ref(
                 const fmt_str = comptime s: {
                     const hex_digits =
                         @divFloor(backing_bits, 4) +
-                        @as(comptime_int, @boolToInt(backing_bits % 4 > 0));
+                        @as(comptime_int, @intFromBool(backing_bits % 4 > 0));
 
                     break :s std.fmt.comptimePrint(
                         "<{{s}}@{{x:0{d}}}>",
@@ -38,7 +38,7 @@ pub fn Ref(
                     );
                 };
 
-                try writer.print(fmt_str, .{@tagName(tag), self.index});
+                try writer.print(fmt_str, .{ @tagName(tag), self.index });
             } else {
                 try writer.print(fmt ++ "{d}", .{self.index});
             }
@@ -161,6 +161,11 @@ pub fn RefMap(comptime R: type, comptime T: type) type {
             return self.getOpt(ref).?;
         }
 
+        /// the number of refs in use
+        pub fn count(self: Self) usize {
+            return self.items.items.len - self.unused.items.len;
+        }
+
         pub const Iterator = struct {
             map: *const Self,
             index: R.Int = 0,
@@ -187,14 +192,18 @@ pub fn RefMap(comptime R: type, comptime T: type) type {
                 ref: R,
                 ptr: *T,
             };
-            
+
             pub fn nextEntry(iter: *Iterator) ?Entry {
                 const items = iter.map.items.items;
                 if (iter.index >= items.len) return null;
 
                 // seek next item
-                while (items[iter.index] == null) {
+                while (iter.index < items.len) {
+                    if (items[iter.index] != null) break;
                     iter.index += 1;
+                } else {
+                    // no items remaininmg
+                    return null;
                 }
 
                 // return item and iterate

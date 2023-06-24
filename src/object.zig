@@ -12,7 +12,7 @@ pub const Object = union(enum) {
     pub const Rc = struct {
         count: usize,
         obj: Self,
-        
+
         /// create an rc with 1 reference
         pub fn init(obj: Object) Rc {
             return Rc{
@@ -22,14 +22,15 @@ pub const Object = union(enum) {
         }
     };
 
+    unit,
     int: i64,
     string: []const u8,
-    
+
     pub const format = formatObject;
 
-    pub fn deinit(self: *Self, ally: Allocator) void {
-        switch (self.*) {
-            .int => {},
+    pub fn deinit(self: Self, ally: Allocator) void {
+        switch (self) {
+            .unit, .int => {},
             .string => |str| ally.free(str),
         }
     }
@@ -37,10 +38,10 @@ pub const Object = union(enum) {
     pub fn clone(self: *const Self, ally: Allocator) Allocator.Error!Self {
         var obj = self.*;
         switch (obj) {
-            .int => {},
+            .unit, .int => {},
             .string => |*str| str.* = try ally.dupe(u8, str.*),
         }
- 
+
         return obj;
     }
 };
