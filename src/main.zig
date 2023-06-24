@@ -4,7 +4,7 @@ const bc = @import("bytecode.zig");
 const Object = @import("object.zig").Object;
 
 comptime {
-    std.testing.refAllDeclsRecursive(@This());
+    std.testing.refAllDeclsRecursive(bc);
 }
 
 fn init() !void {
@@ -28,12 +28,10 @@ pub fn main() !void {
         Object{ .string = "hello, world!" },
     };
 
-    const code = [_]u8{
-        // load_const 0
-        @intFromEnum(bc.Inst.load_const), 0, 0, 0, 0,
-        // nop
-        @intFromEnum(bc.Inst.nop),
-    };
+    const code = bc.ct_parse(
+        \\ load_const 0
+        \\ nop
+    );
 
     const owned_consts = try ally.alloc(Object, consts.len);
     for (consts, 0..) |obj, i| {

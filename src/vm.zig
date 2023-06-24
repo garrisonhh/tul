@@ -92,7 +92,11 @@ const runtime = struct {
         ally.destroy(node);
     }
 
-    inline fn execInst(frame_p: **bc.Frame, inst: bc.Inst, consumed: u64) !void {
+    inline fn execInst(
+        frame_p: **bc.Frame,
+        inst: bc.Inst,
+        consumed: u64,
+    ) !void {
         const frame = frame_p.*;
         const func = frame.func;
 
