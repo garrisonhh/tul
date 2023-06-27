@@ -18,6 +18,10 @@ pub const Token = struct {
     index: usize,
     len: usize,
     type: Type,
+
+    pub fn slice(self: Token, text: []const u8) []const u8 {
+        return text[self.index..self.index + self.len];
+    }
 };
 
 /// type for metaprogramming symbol tokens
@@ -62,6 +66,7 @@ fn isIdentStart(c: Codepoint) bool {
         .BasicLatin,
         .Latin1Supplement,
         .Emoticons,
+        .MiscellaneousSymbolsAndPictographs,
         => b: {
             const is_space = c.isSpace();
             const is_sym = Symbol.get(c) != null;
@@ -139,6 +144,7 @@ pub fn next(self: *Self) Error!?Token {
             break :t .ident;
         } else {
             std.debug.print("disallowed character: `{}`\n", .{c});
+            std.debug.print("blk: {}\n", .{c.getUnicodeBlock()});
             return Error.DisallowedCharacter;
         }
     };

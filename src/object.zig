@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
+const vm = @import("vm.zig");
 const formatObject = @import("formatters.zig").formatObject;
 
 pub const Object = union(enum) {
@@ -24,14 +25,23 @@ pub const Object = union(enum) {
 
     unit,
     int: i64,
+    /// owned string
     string: []const u8,
+    /// owned string
+    tag: []const u8,
+    /// owned array of acq'd refs
+    list: []const Ref,
 
     pub const format = formatObject;
 
     pub fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
             .unit, .int => {},
-            .string => |str| ally.free(str),
+            .string, .tag => |str| ally.free(str),
+            .list => |refs| {
+                vm.deacqAll(refs);
+                ally.free(refs);
+            },
         }
     }
 
@@ -39,7 +49,16 @@ pub const Object = union(enum) {
         var obj = self.*;
         switch (obj) {
             .unit, .int => {},
-            .string => |*str| str.* = try ally.dupe(u8, str.*),
+            // direct dupe
+            .string, .tag => |*str| {
+                const Item = @typeInfo(@TypeOf(str.ptr)).Pointer.child;
+                str.* = try ally.dupe(Item, str.*);
+            },
+            // deep dupe
+            .list => |*refs| {
+                refs.* = try ally.dupe(Ref, refs.*);
+                vm.acqAll(refs.*);
+            },
         }
 
         return obj;
