@@ -6,7 +6,7 @@ const formatObject = @import("formatters.zig").formatObject;
 pub const Object = union(enum) {
     const Self = @This();
     pub const Tag = std.meta.Tag(Self);
-    pub const Ref = com.Ref(.object, @sizeOf(usize));
+    pub const Ref = com.Ref(.object, @bitSizeOf(usize));
     pub const RcMap = com.RefMap(Ref, Rc);
 
     pub const Rc = struct {

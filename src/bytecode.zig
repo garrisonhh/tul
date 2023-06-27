@@ -20,7 +20,7 @@ pub const Inst = enum(u8) {
                     .value = i,
                 };
             }
-            
+
             break :t @Type(.{
                 .Enum = .{
                     .tag_type = u8,
@@ -56,6 +56,8 @@ pub const Inst = enum(u8) {
     load_const,
     inspect,
 
+    jump,
+
     swap, // x y - y x
     dup, // x - x x
     over, // x y - x y x
@@ -76,6 +78,7 @@ pub const Inst = enum(u8) {
                 .nop => m(0, 0, 0),
                 .load_const => m(0, 1, 4),
                 .inspect => m(1, 1, 0),
+                .jump => m(0, 0, 4),
                 .swap => m(2, 2, 0),
                 .dup => m(1, 2, 0),
                 .over => m(2, 3, 0),
@@ -122,8 +125,8 @@ pub const Inst = enum(u8) {
             return iter.cur[0];
         }
 
-        /// set state to an index
-        pub fn jump(iter: *Iterator, index: usize) Error!void {
+        /// set state to an absolute index
+        fn jump(iter: *Iterator, index: usize) Error!void {
             if (index >= iter.start.len) {
                 return Error.InvalidJump;
             }
@@ -185,7 +188,7 @@ const comptime_parsing = struct {
             if (std.mem.indexOf(u8, line, ";")) |index| {
                 return line[0..index];
             }
-            
+
             return line;
         }
     };
@@ -236,7 +239,7 @@ const comptime_parsing = struct {
             }
         }
     }
-    
+
     /// parses non-negative decimal to a comptime_int
     fn parseUInt(comptime text: []const u8) comptime_int {
         comptime {
@@ -295,14 +298,14 @@ const comptime_parsing = struct {
             break :ct bytes.buffer;
         };
     }
-    
+
     /// parse full bytecode program
     /// supports asm-style comments with ';'
     fn parseBytecode(comptime str: []const u8) [BytecodeBytes(str)]u8 {
         return comptime ct: {
             var bytes = std.BoundedArray(u8, BytecodeBytes(str)){};
             var lines = splitLines(str);
-            
+
             while (lines.next()) |line| {
                 const line_bytes = parseLine(line);
                 bytes.appendSliceAssumeCapacity(&line_bytes);
@@ -322,8 +325,7 @@ fn expectParse(bytes: []const u8, comptime str: []const u8) !void {
 }
 
 test "line parsing" {
-    try expectParse(
-        &.{0, 1, 0, 0, 1, 0},
+    try expectParse(&.{ 0, 1, 0, 0, 1, 0 },
         \\ nop
         \\ ; this is a comment
         \\ load_const 256 ; this is another comment
@@ -424,7 +426,12 @@ pub const Frame = struct {
     pub fn peekArray(self: Self, comptime N: comptime_int) [N]Object.Ref {
         self.assertStack(N);
         var arr: [N]Object.Ref = undefined;
-        @memcpy(&arr, self.stack.items[self.stack.items.len - N..]);
+        @memcpy(&arr, self.stack.items[self.stack.items.len - N ..]);
         return arr;
+    }
+
+    /// jump to an instruction address
+    pub fn jump(self: *Self, index: usize) Inst.Iterator.Error!void {
+        try self.iter.jump(index);
     }
 };

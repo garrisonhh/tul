@@ -49,7 +49,7 @@ fn ReturnType(comptime func: anytype) type {
 }
 
 /// turn `fn(Object.Ref) T` into a version that operates on and returns an array
-/// 
+///
 /// get output with '.f' since returning parametrized function types isn't
 /// currently supported afaik
 fn arrayify(comptime func: anytype) type {
@@ -78,7 +78,7 @@ fn arrayify(comptime func: anytype) type {
 }
 
 /// turn `fn(Object.Ref) void` into a version that operates on a slice
-fn sliceify(comptime func: fn(Object.Ref) void) fn([]const Object.Ref) void {
+fn sliceify(comptime func: fn (Object.Ref) void) fn ([]const Object.Ref) void {
     return struct {
         fn f(refs: []const Object.Ref) void {
             for (refs) |ref| func(ref);
@@ -152,6 +152,7 @@ const runtime = struct {
         // execute
         switch (inst) {
             .nop => {},
+
             .load_const => {
                 const const_obj = func.consts[consumed];
                 const ref = try new(const_obj);
@@ -160,6 +161,11 @@ const runtime = struct {
             .inspect => {
                 const obj = get(frame.peek());
                 std.debug.print("[inspect] {}\n", .{obj});
+            },
+
+            // control flow
+            .jump => {
+                try frame.jump(@intCast(usize, consumed));
             },
 
             // stack manipulation
