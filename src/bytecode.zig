@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const com = @import("common");
 const vm = @import("vm.zig");
 const Object = @import("object.zig").Object;
 const in_debug = @import("builtin").mode == .Debug;
@@ -336,20 +337,15 @@ test "line parsing" {
 pub const Function = struct {
     const Self = @This();
 
-    pub const Diff = struct {
-        inputs: usize,
-        outputs: usize,
-    };
-
-    /// owned by function
-    consts: []Object,
+    /// gc tracked values
+    consts: []const Object.Ref,
     /// bytecode
     code: []const u8,
     /// max refs required for stack vm
     stack_size: usize,
 
-    pub fn deinit(self: *const Self, ally: Allocator) void {
-        for (self.consts) |obj| obj.deinit(ally);
+    pub fn deinit(self: Self, ally: Allocator) void {
+        vm.deacqAll(self.consts);
         ally.free(self.consts);
         ally.free(self.code);
     }
@@ -363,6 +359,89 @@ pub const Function = struct {
         }
 
         return n;
+    }
+
+    /// print this function's code
+    pub fn display(
+        self: Self,
+        writer: anytype,
+    ) (Inst.Iterator.Error ||  @TypeOf(writer).Error)!void {
+        var insts = Inst.iterator(self.code);
+        var consumed: u64 = undefined;
+        while (try insts.next(&consumed)) |inst| {
+            try writer.print("{s} ", .{@tagName(inst)});
+
+            if (inst == .load_const) {
+                const ref = self.consts[consumed];
+                try writer.print("{}", .{vm.get(ref)});
+            } else if (inst.getMeta(.consumes) > 0) {
+                try writer.print("{d}", .{consumed});
+            }
+
+            try writer.writeByte('\n');
+        }
+    }
+};
+
+/// a tool for easily creating bytecode functions
+///
+/// builders are not reusable, you instantiate them, build(), and then store the
+/// function for whatever purpose
+pub const Builder = struct {
+    const Self = @This();
+
+    ally: Allocator,
+    consts: std.ArrayListUnmanaged(Object.Ref) = .{},
+    code: std.ArrayListUnmanaged(u8) = .{},
+
+    pub fn init(ally: Allocator) Self {
+       return .{ .ally = ally }; 
+    }
+
+    /// invalidates builder
+    pub fn build(self: *Self) Allocator.Error!Function {
+        return Function{
+            .consts = try self.consts.toOwnedSlice(self.ally),
+            .code = try self.code.toOwnedSlice(self.ally),
+            // TODO am I statically analyzing this? making the consumer of this
+            // builder track it?
+            .stack_size = 256,
+        };
+    }
+
+    /// stores and acqs a ref to the builder, returns const index
+    fn addConst(self: *Self, ref: Object.Ref) Allocator.Error!u32 {
+        vm.acq(ref);
+        const index = @intCast(u32, self.consts.items.len);
+        try self.consts.append(self.ally, ref);
+        return index;
+    }
+
+    /// store and acq a ref; add a load instruction
+    pub fn loadConst(self: *Self, ref: Object.Ref) Allocator.Error!void {
+        const ld = try self.addConst(ref);
+        try self.addInstC(.load_const, ld);
+    }
+
+    fn Consumed(comptime inst: Inst) type {
+        return std.meta.Int(.unsigned, 8 * inst.getMeta(.consumes));
+    }
+
+    /// add an instruction with consumed data. for instructions with no data,
+    /// this type will be `u0`.
+    pub fn addInstC(
+        self: *Self,
+        comptime inst: Inst,
+        c: Consumed(inst),
+    ) Allocator.Error!void {
+        try self.addInst(inst);
+        const consumed = com.bytes.bytesFromInt(Consumed(inst), c, .Big);
+        try self.code.appendSlice(self.ally, &consumed);
+    }
+
+    /// add an instruction with no consumed data
+    pub fn addInst(self: *Self, inst: Inst) Allocator.Error!void {
+        try self.code.append(self.ally, @intFromEnum(inst));
     }
 };
 

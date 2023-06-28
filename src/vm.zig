@@ -14,27 +14,9 @@ var mem = Object.RcMap{};
 var call_stack = CallStack{};
 
 pub fn deinit() void {
-    deleteAllObjects();
     mem.deinit(ally);
 
     _ = gpa.deinit();
-}
-
-/// delete all objects in memory
-fn deleteAllObjects() void {
-    var rc_iter = mem.iterator();
-    while (rc_iter.nextEntry()) |entry| {
-        const rc = entry.ptr;
-        const ref = entry.ref;
-
-        rc.obj.deinit(ally);
-        mem.del(ref);
-    }
-}
-
-/// return runtime to a clean condition
-pub fn reset() void {
-    deleteAllObjects();
 }
 
 /// clones the init object and places it in gc memory with 1 reference
@@ -108,6 +90,11 @@ pub fn get(ref: Object.Ref) *const Object {
     return &mem.get(ref).obj;
 }
 
+/// get the count of an rc
+pub fn refCount(ref: Object.Ref) usize {
+    return mem.get(ref).count;
+}
+
 /// see acq
 pub const acqAll = sliceify(acq);
 /// see deacq
@@ -117,12 +104,6 @@ pub const getArray = arrayify(get).f;
 
 /// code execution
 const runtime = struct {
-    fn assertClean() void {
-        const assert = std.debug.assert;
-        assert(mem.count() == 0);
-        // assert(call_stack.len() == 0);
-    }
-
     /// adds a frame to the call stack
     fn pushFrame(func: *const bc.Function) Allocator.Error!*bc.Frame {
         const frame = try bc.Frame.init(ally, func);
@@ -154,8 +135,8 @@ const runtime = struct {
             .nop => {},
 
             .load_const => {
-                const const_obj = func.consts[consumed];
-                const ref = try new(const_obj);
+                const ref = func.consts[consumed];
+                acq(ref);
                 frame.push(ref);
             },
             .inspect => {
@@ -213,15 +194,12 @@ const runtime = struct {
                     else => unreachable,
                 };
 
-                const result = try new(Object{ .int = n });
-                frame.push(result);
+                frame.push(try new(.{ .int = n }));
             },
         }
     }
 
     fn exec(main: *const bc.Function) !Object.Ref {
-        assertClean();
-
         var frame = try pushFrame(main);
         defer popFrame();
 
@@ -237,14 +215,6 @@ const runtime = struct {
 };
 
 /// run a function on the vm
-///
-/// vm uses its internal allocator for memory management, but the final value is
-/// cloned onto the allocator passed to this function
-pub fn run(caller_ally: Allocator, main: bc.Function) !Object {
-    defer reset();
-
-    const final = try runtime.exec(&main);
-    defer deacq(final);
-
-    return try get(final).clone(caller_ally);
+pub fn run(main: bc.Function) !Object.Ref {
+    return try runtime.exec(&main);
 }

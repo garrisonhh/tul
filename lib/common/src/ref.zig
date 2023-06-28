@@ -26,7 +26,9 @@ pub fn Ref(
             _: std.fmt.FormatOptions,
             writer: anytype,
         ) @TypeOf(writer).Error!void {
-            if (comptime std.mem.eql(u8, fmt, "p")) {
+            if (comptime std.mem.eql(u8, fmt, "")) {
+                @compileError("please provide a prefix or other fmt for ref.");
+            } else if (comptime std.mem.eql(u8, fmt, "p")) {
                 const fmt_str = comptime s: {
                     const hex_digits =
                         @divFloor(backing_bits, 4) +
