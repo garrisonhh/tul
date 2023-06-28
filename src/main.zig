@@ -33,6 +33,7 @@ pub fn main() !void {
         "(abc def)",
         "((lists) (within) (lists))",
         "((((🔥 () 🔥))))",
+        "(+ 123 -456 +23)",
         "((())",
     };
 
@@ -40,21 +41,21 @@ pub fn main() !void {
         try stdout.print("[program]\n{s}\n\n", .{prog});
 
         const start_time = com.time.now();
-        const res = parser.parse(ally, prog); 
+        const res = parser.parse(ally, prog);
         const duration = com.time.now() - start_time;
 
         if (res) |ref| {
             defer vm.deacq(ref);
 
             const obj = vm.get(ref);
-            try stdout.print("[success in {d:.6}s]\n{}\n", .{duration, obj});
+            try stdout.print("[success in {d:.6}s]\n{}\n", .{ duration, obj });
         } else |err| {
             try stdout.print(
                 "[failure in {d:.6}s]\nfailed with {}\n",
-                .{duration, err},
+                .{ duration, err },
             );
         }
-        
+
         try stdout.writeAll("\n");
     }
 }

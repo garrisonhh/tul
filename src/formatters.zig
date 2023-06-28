@@ -10,7 +10,6 @@ pub fn formatObject(
     writer: anytype,
 ) @TypeOf(writer).Error!void {
     switch (obj.*) {
-        .unit => try writer.writeAll("()"),
         .int => |n| try writer.print("{}", .{n}),
         .string => |s| try writer.print("\"{}\"", .{std.zig.fmtEscapes(s)}),
         .tag => |t| try writer.print("@{s}", .{t}),
@@ -21,6 +20,6 @@ pub fn formatObject(
                 try writer.print("{}", .{vm.get(ref)});
             }
             try writer.writeAll(")");
-        }
+        },
     }
 }

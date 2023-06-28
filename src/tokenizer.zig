@@ -20,7 +20,7 @@ pub const Token = struct {
     type: Type,
 
     pub fn slice(self: Token, text: []const u8) []const u8 {
-        return text[self.index..self.index + self.len];
+        return text[self.index .. self.index + self.len];
     }
 };
 
@@ -36,7 +36,7 @@ const Symbol = struct {
 
     fn ct(comptime str: []const u8, ty: Token.Type) Symbol {
         return Symbol{
-            .c = Codepoint.ct(str),            
+            .c = Codepoint.ct(str),
             .type = ty,
         };
     }
@@ -51,14 +51,6 @@ const Symbol = struct {
     }
 };
 
-/// valid codepoints for the beginning of a number
-fn isNumberStart(c: Codepoint) bool {
-    return switch (c.c) {
-        '-', '+', '0'...'9' => true,
-        else => false,
-    };
-}
-
 /// valid codepoints for the beginning of an identifier
 /// TODO extend this using js or c++ spec as examples
 fn isIdentStart(c: Codepoint) bool {
@@ -69,9 +61,10 @@ fn isIdentStart(c: Codepoint) bool {
         .MiscellaneousSymbolsAndPictographs,
         => b: {
             const is_space = c.isSpace();
+            const is_digit = c.isDigit(10);
             const is_sym = Symbol.get(c) != null;
 
-            break :b !is_space and !is_sym;
+            break :b !is_space and !is_sym and !is_digit;
         },
         else => false,
     };
@@ -80,7 +73,7 @@ fn isIdentStart(c: Codepoint) bool {
 /// valid codepoints for the tail of an identifier
 /// TODO extend this using js or c++ spec as examples
 fn isIdentInner(c: Codepoint) bool {
-    return isIdentStart(c);
+    return isIdentStart(c) or c.isDigit(10);
 }
 
 const Self = @This();
@@ -136,9 +129,20 @@ pub fn next(self: *Self) Error!?Token {
     const ty: Token.Type = t: {
         if (Symbol.get(c)) |t| {
             break :t t;
-        } else if (isNumberStart(c)) {
+        } else if (c.isDigit(10)) {
             try self.acceptDigits(10);
             break :t .number;
+        } else if (c.c == '+' or c.c == '-') {
+            const is_number =
+                if (try self.iter.peek()) |pk| pk.isDigit(10) else false;
+
+            if (is_number) {
+                try self.acceptDigits(10);
+                break :t .number;
+            } else {
+                try self.acceptWhile(isIdentInner);
+                break :t .ident;
+            }
         } else if (isIdentStart(c)) {
             try self.acceptWhile(isIdentInner);
             break :t .ident;
@@ -157,4 +161,3 @@ pub fn next(self: *Self) Error!?Token {
         .type = ty,
     };
 }
-

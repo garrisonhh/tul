@@ -5,12 +5,10 @@ const Tokenizer = @import("tokenizer.zig");
 const Token = Tokenizer.Token;
 const Object = @import("object.zig").Object;
 
-const ParseError = error {
+const ParseError = error{
     UnexpectedEof,
     InvalidSyntax,
-
-    /// TODO remove eventually
-    Unimplemented,
+    InvalidNumber,
 };
 
 pub const Error = Allocator.Error || Tokenizer.Error || ParseError;
@@ -32,6 +30,13 @@ const Context = struct {
         };
     }
 
+    fn deinit(self: *Self, ally: Allocator) void {
+        _ = self;
+        _ = ally;
+
+        // stub
+    }
+
     fn next(self: *Self) Tokenizer.Error!?Token {
         if (self.cache) |tok| {
             self.cache = null;
@@ -48,7 +53,7 @@ const Context = struct {
         }
 
         self.cache = try self.tokens.next();
-        return self.cache;        
+        return self.cache;
     }
 
     /// iterate past a peeked token
@@ -75,7 +80,7 @@ const Context = struct {
     }
 };
 
-/// this can also produce unit `()` if the list is empty
+/// list ::= lparen atom* rparen
 fn parseList(ctx: *Context) Error!Object.Ref {
     var list = std.ArrayList(Object.Ref).init(ctx.ally);
     defer {
@@ -95,12 +100,10 @@ fn parseList(ctx: *Context) Error!Object.Ref {
         try list.append(try parseAtom(ctx));
     }
 
-    if (list.items.len == 0) {
-        return try vm.new(Object.unit);
-    }
     return try vm.new(.{ .list = list.items });
 }
 
+/// atom ::= ident | number | list
 fn parseAtom(ctx: *Context) Error!Object.Ref {
     const tok = try ctx.mustPeek();
     return switch (tok.type) {
@@ -109,20 +112,34 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
             const ident = tok.slice(ctx.text);
             break :t try vm.new(.{ .tag = ident });
         },
+        .number => t: {
+            ctx.accept();
+            const num_str = tok.slice(ctx.text);
+            const num = std.fmt.parseInt(i64, num_str, 10) catch {
+                return Error.InvalidNumber;
+            };
+            break :t try vm.new(.{ .int = num });
+        },
         .lparen => try parseList(ctx),
         .rparen => Error.InvalidSyntax,
-        else => Error.Unimplemented,
     };
 }
 
+/// parse a program into an object representing executable code
+///
+/// TODO I probably want to capture tokenization and parsing errors and
+/// print error messages with the current context state, instead of
+/// propagating them to the caller.
+///
+/// some ideas:
+/// - return either an error with data attached or an object ref
+/// - return an object ref, which might represent an error (this would be
+///   very cool for its homoiconic properties)
+/// - store errors/warnings as they are generated in a cache inside context,
+///   the caller would then be responsible for checking this
 pub fn parse(ally: Allocator, text: []const u8) Error!Object.Ref {
     var ctx = Context.init(ally, text);
+    defer ctx.deinit(ally);
 
-    // TODO I probably want to capture tokenization and parsing errors and
-    // print error messages with the current context state, instead of
-    // propagating them to the caller. or return either an object and some
-    // error struct to the caller.
-    const root = try parseAtom(&ctx);
-
-    return root;
+    return try parseAtom(&ctx);
 }

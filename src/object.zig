@@ -23,7 +23,6 @@ pub const Object = union(enum) {
         }
     };
 
-    unit,
     int: i64,
     /// owned string
     string: []const u8,
@@ -36,7 +35,7 @@ pub const Object = union(enum) {
 
     pub fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
-            .unit, .int => {},
+            .int => {},
             .string, .tag => |str| ally.free(str),
             .list => |refs| {
                 vm.deacqAll(refs);
@@ -48,13 +47,13 @@ pub const Object = union(enum) {
     pub fn clone(self: *const Self, ally: Allocator) Allocator.Error!Self {
         var obj = self.*;
         switch (obj) {
-            .unit, .int => {},
-            // direct dupe
+            .int => {},
+            // shallow dupe
             .string, .tag => |*str| {
                 const Item = @typeInfo(@TypeOf(str.ptr)).Pointer.child;
                 str.* = try ally.dupe(Item, str.*);
             },
-            // deep dupe
+            // deep dupe (shallow dupe + acq everything)
             .list => |*refs| {
                 refs.* = try ally.dupe(Ref, refs.*);
                 vm.acqAll(refs.*);
