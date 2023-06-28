@@ -215,6 +215,7 @@ const runtime = struct {
 };
 
 /// run a function on the vm
+/// memory usage here is gc'd using the vm's internal allocator
 pub fn run(main: bc.Function) !Object.Ref {
     return try runtime.exec(&main);
 }

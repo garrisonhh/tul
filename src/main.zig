@@ -41,14 +41,18 @@ pub fn main() !void {
         const code = try parser.parse(ally, prog);
         defer vm.deacq(code);
 
+        const parse_time = com.time.now();
+
         const func = try lower.lower(ally, code);
         defer func.deinit(ally);
+
+        const lower_time = com.time.now();
 
         const res = try vm.run(func);
         defer vm.deacq(res);
 
-        const duration = com.time.now() - start_time;
-        
+        const exec_time = com.time.now();
+
         // output
         try stdout.print("[program]\n{s}\n\n", .{prog});
         try stdout.print("[code]\n{}\n\n", .{vm.get(code)});
@@ -57,6 +61,21 @@ pub fn main() !void {
         try stdout.print("\n", .{});
         try stdout.print("[result]\n{}\n\n", .{vm.get(res)});
 
-        try stdout.print("all steps took {d:.6}s.\n\n", .{duration});
+        try stdout.print(
+            \\[timing]
+            \\total     {[total]d:.6}s
+            \\parsing   {[parse]d:.6}s
+            \\lowering  {[lower]d:.6}s
+            \\execution {[exec]d:.6}s
+            \\ 
+            \\
+        ,
+            .{
+                .total = exec_time - start_time,
+                .parse = parse_time - start_time,
+                .lower = lower_time - parse_time,
+                .exec = exec_time - lower_time,
+            },
+        );
     }
 }

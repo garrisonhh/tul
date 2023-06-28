@@ -365,7 +365,7 @@ pub const Function = struct {
     pub fn display(
         self: Self,
         writer: anytype,
-    ) (Inst.Iterator.Error ||  @TypeOf(writer).Error)!void {
+    ) (Inst.Iterator.Error || @TypeOf(writer).Error)!void {
         var insts = Inst.iterator(self.code);
         var consumed: u64 = undefined;
         while (try insts.next(&consumed)) |inst| {
@@ -395,7 +395,7 @@ pub const Builder = struct {
     code: std.ArrayListUnmanaged(u8) = .{},
 
     pub fn init(ally: Allocator) Self {
-       return .{ .ally = ally }; 
+        return .{ .ally = ally };
     }
 
     /// invalidates builder

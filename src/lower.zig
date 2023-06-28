@@ -4,7 +4,7 @@ const vm = @import("vm.zig");
 const bc = @import("bytecode.zig");
 const Object = @import("object.zig").Object;
 
-const LowerError = error {
+const LowerError = error{
     BadArity,
 
     // TODO eradicate these
@@ -25,11 +25,11 @@ fn lowerCallee(bob: *bc.Builder, ref: Object.Ref, arity: usize) Error!void {
             // these operators act like a reduction with pure function with two
             // arguments
             const bin_reduce_ops = comptime std.ComptimeStringMap(bc.Inst, .{
-                .{"+", .add},
-                .{"-", .sub},
-                .{"*", .mul},
-                .{"/", .div},
-                .{"%", .mod},
+                .{ "+", .add },
+                .{ "-", .sub },
+                .{ "*", .mul },
+                .{ "/", .div },
+                .{ "%", .mod },
             });
 
             if (bin_reduce_ops.get(ident)) |inst| {
@@ -46,7 +46,7 @@ fn lowerCallee(bob: *bc.Builder, ref: Object.Ref, arity: usize) Error!void {
 /// lower a ref being read as a value
 fn lowerValue(bob: *bc.Builder, ref: Object.Ref) Error!void {
     switch (vm.get(ref).*) {
-        .tag => return Error.TodoVars, 
+        .tag => return Error.TodoVars,
         .int, .string => try bob.loadConst(ref),
         .list => |refs| {
             // unit evaluates to unit
