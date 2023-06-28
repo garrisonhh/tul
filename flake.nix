@@ -28,7 +28,7 @@
       # create a derivation for the build with some args for `zig build`
       makePackage = buildArgs:
         let
-          argv =
+          args =
             with pkgs.lib.strings;
             concatStrings (intersperse " " buildArgs);
         in
@@ -39,13 +39,20 @@
             buildInputs = inputs;
             buildPhase = ''
               export HOME=$NIX_BUILD_TOP
-              zig build ${argv}
+              zig build ${args}
             '';
 
             installPhase = ''
               mkdir -p $out/bin/
+              mkdir -p $bin/
+              install zig-out/bin/${name} $bin/
               install zig-out/bin/${name} $out/bin/
             '';
+
+            # TODO learn more about outputs and what is expected. I think using
+            # bin by default makes sense for this project, but I would like to
+            # understand more
+            outputs = [ "bin" "out" ];
           };
 
       packages = {
