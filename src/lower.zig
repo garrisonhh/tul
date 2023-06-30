@@ -81,6 +81,7 @@ fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
 /// or something? lambda-ness would be cool)
 pub fn lower(ally: Allocator, code: Object.Ref) Error!bc.Function {
     var bob = Builder.init(ally);
+    errdefer bob.deinit();
     try lowerValue(&bob, code);
 
     return bob.build();

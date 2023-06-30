@@ -414,7 +414,13 @@ pub const Builder = struct {
         return .{ .ally = ally };
     }
 
-    /// invalidates builder
+    pub fn deinit(self: *Self) void {
+        vm.deacqAll(self.consts.items);
+        self.consts.deinit(self.ally);
+        self.code.deinit(self.ally);
+    }
+
+    /// frees all builder memory, you can safely ignore deinit if you call this
     pub fn build(self: *Self) Allocator.Error!Function {
         return Function{
             .consts = try self.consts.toOwnedSlice(self.ally),
