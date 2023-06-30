@@ -30,6 +30,7 @@ pub fn main() !void {
 
     // behavior
     const progs = [_][]const u8{
+        "(and (not false) true)",
         "(+ 2 2)",
         "(/ (* 3 4) 2)",
     };

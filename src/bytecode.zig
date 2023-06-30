@@ -65,11 +65,17 @@ pub const Inst = enum(u8) {
     rot, // x y z - y z x
     drop, // x y - x
 
+    // math
     add,
     sub,
     mul,
     div,
     mod,
+
+    // logic
+    land,
+    lor,
+    lnot,
 
     /// comptime mapping of inst -> metadata
     fn meta(comptime self: Self) Meta {
@@ -78,14 +84,24 @@ pub const Inst = enum(u8) {
             return switch (self) {
                 .nop => m(0, 0, 0),
                 .load_const => m(0, 1, 4),
-                .inspect => m(1, 1, 0),
                 .jump => m(0, 0, 4),
                 .swap => m(2, 2, 0),
                 .dup => m(1, 2, 0),
                 .over => m(2, 3, 0),
                 .rot => m(3, 3, 0),
                 .drop => m(1, 0, 0),
-                .add, .sub, .mul, .div, .mod => m(2, 1, 0),
+
+                .inspect,
+                .lnot,
+                => m(1, 1, 0),
+                .add,
+                .sub,
+                .mul,
+                .div,
+                .mod,
+                .land,
+                .lor,
+                => m(2, 1, 0),
             };
         }
     }

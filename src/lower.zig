@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const vm = @import("vm.zig");
 const bc = @import("bytecode.zig");
+const Builder = bc.Builder;
 const Object = @import("object.zig").Object;
 
 const LowerError = error{
@@ -14,12 +15,8 @@ const LowerError = error{
 
 pub const Error = Allocator.Error || LowerError;
 
-fn reqArgs(comptime req: comptime_int, nargs: usize) Error!void {
-    if (nargs < req) return Error.BadArity;
-}
-
 /// lower a ref being called as a function
-fn lowerCallee(bob: *bc.Builder, ref: Object.Ref, arity: usize) Error!void {
+fn lowerCallee(bob: *Builder, ref: Object.Ref, arity: usize) Error!void {
     switch (vm.get(ref).*) {
         .tag => |ident| {
             // these operators act like a reduction with pure function with two
@@ -30,11 +27,22 @@ fn lowerCallee(bob: *bc.Builder, ref: Object.Ref, arity: usize) Error!void {
                 .{ "*", .mul },
                 .{ "/", .div },
                 .{ "%", .mod },
+                .{ "and", .land },
+                .{ "or", .lor },
+            });
+
+            // these operators act like a pure function consuming and producing
+            // a single value
+            const in_out_ops = comptime std.ComptimeStringMap(bc.Inst, .{
+                .{ "not", .lnot },
             });
 
             if (bin_reduce_ops.get(ident)) |inst| {
-                try reqArgs(1, arity);
+                if (arity < 2) return LowerError.BadArity;
                 for (0..arity - 1) |_| try bob.addInst(inst);
+            } else if (in_out_ops.get(ident)) |inst| {
+                if (arity != 1) return LowerError.BadArity;
+                try bob.addInst(inst);
             } else {
                 return Error.TodoCallee;
             }
@@ -44,10 +52,10 @@ fn lowerCallee(bob: *bc.Builder, ref: Object.Ref, arity: usize) Error!void {
 }
 
 /// lower a ref being read as a value
-fn lowerValue(bob: *bc.Builder, ref: Object.Ref) Error!void {
+fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
     switch (vm.get(ref).*) {
         .tag => return Error.TodoVars,
-        .int, .string => try bob.loadConst(ref),
+        .bool, .int, .string => try bob.loadConst(ref),
         .list => |refs| {
             // unit evaluates to unit
             if (refs.len == 0) {
@@ -72,7 +80,7 @@ fn lowerValue(bob: *bc.Builder, ref: Object.Ref) Error!void {
 /// program rather than a single function (unless I can have function nesting
 /// or something? lambda-ness would be cool)
 pub fn lower(ally: Allocator, code: Object.Ref) Error!bc.Function {
-    var bob = bc.Builder.init(ally);
+    var bob = Builder.init(ally);
     try lowerValue(&bob, code);
 
     return bob.build();

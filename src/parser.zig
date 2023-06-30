@@ -110,6 +110,16 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
         .ident => t: {
             ctx.accept();
             const ident = tok.slice(ctx.text);
+
+            // since booleans are first-class values, I think it's most
+            // appropriate to treat them as first-class syntax and live in
+            // the parser
+            if (std.mem.eql(u8, ident, "true")) {
+                break :t try vm.new(.{ .bool = true });
+            } else if (std.mem.eql(u8, ident, "false")) {
+                break :t try vm.new(.{ .bool = false });
+            }
+
             break :t try vm.new(.{ .tag = ident });
         },
         .number => t: {

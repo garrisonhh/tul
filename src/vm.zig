@@ -185,7 +185,7 @@ const runtime = struct {
                 const lhs = get(refs[0]).int;
                 const rhs = get(refs[1]).int;
 
-                const n = switch (tag) {
+                const val = switch (tag) {
                     .add => lhs + rhs,
                     .sub => lhs - rhs,
                     .mul => lhs * rhs,
@@ -194,7 +194,31 @@ const runtime = struct {
                     else => unreachable,
                 };
 
-                frame.push(try new(.{ .int = n }));
+                frame.push(try new(.{ .int = val }));
+            },
+
+            // logic
+            inline .land, .lor => |tag| {
+                const refs = frame.popArray(2);
+                defer deacqAll(&refs);
+
+                const lhs = get(refs[0]).bool;
+                const rhs = get(refs[1]).bool;
+
+                const val = switch (tag) {
+                    .land => lhs and rhs,
+                    .lor => lhs or rhs,
+                    else => unreachable,
+                };
+
+                frame.push(try new(.{ .bool = val }));
+            },
+            .lnot => {
+                const ref = frame.pop();
+                defer deacq(ref);
+
+                const val = !get(ref).bool;
+                frame.push(try new(.{ .bool = val }));
             },
         }
     }
