@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const com = @import("common");
 const Object = @import("object.zig").Object;
 const bc = @import("bytecode.zig");
-const in_debug = @import("builtin").Mode == .Debug;
+const in_debug = @import("builtin").mode == .Debug;
 
 const CallStack = std.SinglyLinkedList(bc.Frame);
 
@@ -19,11 +19,37 @@ pub fn deinit() void {
     _ = gpa.deinit();
 }
 
+/// displays memory to stderr for debugging purposes
+pub fn inspectMemory() void {
+    std.debug.assert(in_debug);
+
+    std.debug.print("id\trc\tvalue\n", .{});
+
+    var entries = mem.iterator();
+    while (entries.nextEntry()) |entry| {
+        std.debug.print("{%}\t{}\t{}\n", .{
+            entry.ref,
+            entry.ptr.count,
+            entry.ptr.obj,
+        });
+    }
+}
+
+/// returns number of refs currently allocated
+pub fn allocated() usize {
+    var count: usize = 0;
+    var iter = mem.iterator();
+    while (iter.next()) |_| count += 1;
+
+    return count;
+}
+
 /// clones the init object and places it in gc memory with 1 reference
 pub fn new(init: Object) Allocator.Error!Object.Ref {
     const obj = try init.clone(ally);
     const rc = Object.Rc.init(obj);
-    return try mem.put(ally, rc);
+    const ref = try mem.put(ally, rc);
+    return ref;
 }
 
 fn ReturnType(comptime func: anytype) type {

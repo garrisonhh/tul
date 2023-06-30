@@ -63,4 +63,44 @@ pub const Object = union(enum) {
 
         return obj;
     }
+
+    /// deep structural equality for two refs
+    pub fn eql(ref: Ref, other: Ref) bool {
+        const this = vm.get(ref);
+        const that = vm.get(other);
+
+        if (@as(Tag, this.*) != @as(Tag, that.*)) {
+            return false;
+        }
+
+        return switch (this.*) {
+            // direct comparison
+            inline .bool,
+            .int,
+            => |data, tag| data == @field(that, @tagName(tag)),
+
+            // mem comparison
+            inline .string, .tag => |str, tag| mem: {
+                const other_str = @field(that.*, @tagName(tag));
+                const Item = @typeInfo(@TypeOf(str.ptr)).Pointer.child;
+                break :mem std.mem.eql(Item, str, other_str);
+            },
+
+            // deep comparison
+            .list => |xs| deep: {
+                const os = that.list;
+                if (xs.len != os.len) {
+                    break :deep false;
+                }
+
+                for (xs, os) |x, o| {
+                    if (!Object.eql(x, o)) {
+                        break :deep false;
+                    }
+                }
+
+                break :deep true;
+            },
+        };
+    }
 };

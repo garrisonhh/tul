@@ -1,5 +1,6 @@
 const std = @import("std");
 const stdout = std.io.getStdOut().writer();
+const stderr = std.io.getStdErr().writer();
 const com = @import("common");
 const vm = @import("vm.zig");
 const bc = @import("bytecode.zig");
@@ -7,9 +8,8 @@ const Object = @import("object.zig").Object;
 const parser = @import("parser.zig");
 const lower = @import("lower.zig");
 
-comptime {
-    std.testing.refAllDeclsRecursive(bc);
-}
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const ally = gpa.allocator();
 
 fn init() !void {
     // stub
@@ -17,66 +17,78 @@ fn init() !void {
 
 fn deinit() void {
     vm.deinit();
+    _ = gpa.deinit();
+}
+
+/// one execution cycle
+fn exec(program: []const u8) !Object.Ref {
+    const code = try parser.parse(ally, program);
+    const func = try lower.lower(ally, code);
+    vm.deacq(code);
+
+    const res = try vm.run(func);
+    func.deinit(ally);
+
+    return res;
 }
 
 pub fn main() !void {
-    // boilerplate
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const ally = gpa.allocator();
-
     try init();
     defer deinit();
 
-    // behavior
-    const progs = [_][]const u8{
-        "(and (not false true) true)",
-        "(+ 2 2)",
-        "(/ (* 3 4) 2)",
-    };
+    @panic("TODO");
+}
 
-    for (progs) |prog| {
-        // execution
-        const start_time = com.time.now();
+// testing =====================================================================
 
-        const code = try parser.parse(ally, prog);
-        defer vm.deacq(code);
+/// a test case; both inputs should match
+fn tulTestCase(expected: []const u8, actual: []const u8) !void {
+    const exp = try exec(expected);
+    defer vm.deacq(exp);
+    const got = try exec(actual);
+    defer vm.deacq(got);
 
-        const parse_time = com.time.now();
-
-        const func = try lower.lower(ally, code);
-        defer func.deinit(ally);
-
-        const lower_time = com.time.now();
-
-        const res = try vm.run(func);
-        defer vm.deacq(res);
-
-        const exec_time = com.time.now();
-
-        // output
-        try stdout.print("[program]\n{s}\n\n", .{prog});
-        try stdout.print("[code]\n{}\n\n", .{vm.get(code)});
-        try stdout.print("[bytecode]\n", .{});
-        try func.display(stdout);
-        try stdout.print("\n", .{});
-        try stdout.print("[result]\n{}\n\n", .{vm.get(res)});
-
-        try stdout.print(
-            \\[timing]
-            \\total     {[total]d:.6}s
-            \\parsing   {[parse]d:.6}s
-            \\lowering  {[lower]d:.6}s
-            \\execution {[exec]d:.6}s
-            \\ 
+    // check for equality
+    if (!Object.eql(exp, got)) {
+        try stderr.print(
+            \\[expected input]
+            \\{s}
+            \\[actual input]
+            \\{s}
+            \\
+            \\[expected output]
+            \\{}
+            \\[actual output]
+            \\{}
             \\
         ,
-            .{
-                .total = exec_time - start_time,
-                .parse = parse_time - start_time,
-                .lower = lower_time - parse_time,
-                .exec = exec_time - lower_time,
-            },
+            .{ expected, actual, vm.get(exp), vm.get(got) },
         );
+
+        return error.TestFailure;
+    }
+}
+
+const tul_test_cases = [_][2][]const u8{
+    .{ "true", "(and (not false) true)" },
+    .{ "4", "(+ 2 2)" },
+    .{ "6", " (/ (* 3 4) 2)" },
+};
+
+test "tul-test-cases" {
+    try init();
+    defer deinit();
+
+    for (tul_test_cases) |case| {
+        tulTestCase(case[0], case[1]) catch |e| {
+            try stderr.print("test failed with: {}\n", .{e});
+        };
+
+        if (vm.allocated() > 0) {
+            try stderr.print("unreleased memory after test:\n", .{});
+            vm.inspectMemory();
+
+            return error.UnreleasedMemory;
+        }
     }
 }
