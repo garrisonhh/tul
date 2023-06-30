@@ -57,6 +57,7 @@
 
       packages = {
         default = makePackage [];
+        release = makePackage ["-Doptimize=ReleaseFast"];
       };
 
       # app config for 'nix run'
