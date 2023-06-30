@@ -1,0 +1,33 @@
+name: "format and test master"
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  run-fmt-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: install nix
+        uses: DeterminateSystems/nix-installer-action@v4
+      - name: run magic nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: run zig fmt
+        run: nix develop -c sh -c 'zig fmt --check .'
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: install nix
+        uses: DeterminateSystems/nix-installer-action@v4
+      - name: run magic nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: run tests
+        run: nix develop -c sh -c 'zig build test'

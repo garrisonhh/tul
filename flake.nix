@@ -12,18 +12,11 @@
       system = "x86_64-linux";
 
       # project reqs
-      inherit (pkgs) mkShell;
-      inherit (pkgs.stdenv) mkDerivation;
       pkgs = nixpkgs.legacyPackages.${system};
       zigpkgs = zig.packages.${system};
 
+      inherit (pkgs.stdenv) mkDerivation;
       inputs = [ zigpkgs.master ];
-      extraShellInputs = with pkgs; [ gdb wabt ];
-
-      # developer shell
-      shell = mkShell {
-        packages = inputs ++ extraShellInputs;
-      };
 
       # create a derivation for the build with some args for `zig build`
       makePackage = buildArgs:
@@ -36,7 +29,7 @@
             name = name;
             src = self;
 
-            buildInputs = inputs;
+            nativeBuildInputs = inputs;
             buildPhase = ''
               export HOME=$NIX_BUILD_TOP
               zig build ${args}
@@ -73,7 +66,7 @@
     in
       {
         apps.${system} = apps;
-        devShells.${system}.default = shell;
+        devShells.${system}.default = packages.default;
         packages.${system} = packages;
       };
 }
