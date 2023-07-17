@@ -11,7 +11,7 @@ const lower = @import("lower.zig");
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const ally = gpa.allocator();
 
-fn init() !void {
+fn init() error{}!void {
     // stub
 }
 
@@ -20,16 +20,16 @@ fn deinit() void {
     _ = gpa.deinit();
 }
 
+const ExecError = parser.Error || lower.Error || vm.RuntimeError;
+
 /// one execution cycle
-fn exec(program: []const u8) !Object.Ref {
+fn exec(program: []const u8) ExecError!Object.Ref {
     const code = try parser.parse(ally, program);
+    defer vm.deacq(code);
     const func = try lower.lower(ally, code);
-    vm.deacq(code);
+    defer func.deinit(ally);
 
-    const res = try vm.run(func);
-    func.deinit(ally);
-
-    return res;
+    return try vm.run(func);
 }
 
 pub fn main() !void {
@@ -41,8 +41,13 @@ pub fn main() !void {
 
 // testing =====================================================================
 
+const TestCaseError =
+    ExecError ||
+    @TypeOf(stderr).Error ||
+    error{TestFailure};
+
 /// a test case; both inputs should match
-fn tulTestCase(expected: []const u8, actual: []const u8) !void {
+fn tulTestCase(expected: []const u8, actual: []const u8) TestCaseError!void {
     const exp = try exec(expected);
     defer vm.deacq(exp);
     const got = try exec(actual);
@@ -51,18 +56,18 @@ fn tulTestCase(expected: []const u8, actual: []const u8) !void {
     // check for equality
     if (!Object.eql(exp, got)) {
         try stderr.print(
-            \\[expected input]
-            \\{s}
             \\[actual input]
             \\{s}
-            \\
-            \\[expected output]
-            \\{}
             \\[actual output]
             \\{}
             \\
+            \\[expected input]
+            \\{s}
+            \\[expected output]
+            \\{}
+            \\
         ,
-            .{ expected, actual, vm.get(exp), vm.get(got) },
+            .{ actual, vm.get(got), expected, vm.get(exp) },
         );
 
         return error.TestFailure;

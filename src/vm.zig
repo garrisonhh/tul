@@ -148,11 +148,13 @@ const runtime = struct {
         ally.destroy(node);
     }
 
+    const Error = Allocator.Error || bc.Inst.Iterator.Error;
+
     inline fn execInst(
         frame_p: **bc.Frame,
         inst: bc.Inst,
         consumed: u64,
-    ) !void {
+    ) Error!void {
         const frame = frame_p.*;
         const func = frame.func;
 
@@ -249,7 +251,7 @@ const runtime = struct {
         }
     }
 
-    fn exec(main: *const bc.Function) !Object.Ref {
+    fn exec(main: *const bc.Function) Error!Object.Ref {
         var frame = try pushFrame(main);
         defer popFrame();
 
@@ -264,8 +266,10 @@ const runtime = struct {
     }
 };
 
+pub const RuntimeError = runtime.Error;
+
 /// run a function on the vm
 /// memory usage here is gc'd using the vm's internal allocator
-pub fn run(main: bc.Function) !Object.Ref {
+pub fn run(main: bc.Function) RuntimeError!Object.Ref {
     return try runtime.exec(&main);
 }

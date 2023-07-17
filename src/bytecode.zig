@@ -118,7 +118,7 @@ pub const Inst = enum(u8) {
         return Iterator.init(code);
     }
 
-    const Iterator = struct {
+    pub const Iterator = struct {
         pub const Error = error{
             InvalidInst,
             InvalidJump,
