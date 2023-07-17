@@ -30,4 +30,4 @@ jobs:
       - name: run magic nix cache
         uses: DeterminateSystems/magic-nix-cache-action@main
       - name: run tests
-        run: nix develop -c sh -c 'zig build test'
+        run: nix develop -c sh -c 'zig build test -Dverbose-tests'
