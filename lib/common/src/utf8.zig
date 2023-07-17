@@ -68,6 +68,20 @@ pub const Codepoint = packed struct(CodepointInt) {
         return Iterator.init(text);
     }
 
+    /// how many bytes it takes to store this character as a sequence
+    pub fn byteLength(self: Self) u3 {
+        return std.unicode.utf8CodepointSequenceLength(self.c) catch {
+            unreachable;
+        };
+    }
+
+    /// write this codepoint to a buffer.
+    pub fn toBytes(self: Self, buf: []u8) []const u8 {
+        std.debug.assert(buf.len >= self.byteLength());
+        const len = std.unicode.utf8Encode(self.c, buf) catch unreachable;
+        return buf[0..len];
+    }
+
     /// iterator for unicode codepoints. I could also use std.unicode.Utf8View
     /// but it would require wrapping in another struct anyways
     pub const Iterator = struct {

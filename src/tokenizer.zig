@@ -2,8 +2,8 @@ const std = @import("std");
 const com = @import("common");
 const Codepoint = com.utf8.Codepoint;
 
-pub const Error = error{
-    InvalidUtf8,
+pub const Error = Codepoint.ParseError || error{
+    UnterminatedString,
     DisallowedCharacter,
 };
 
@@ -13,6 +13,7 @@ pub const Token = struct {
         rparen,
         ident,
         number,
+        string,
     };
 
     index: usize,
@@ -114,6 +115,24 @@ fn acceptDigits(
     }
 }
 
+/// accept codepoints until the end of a string
+fn acceptString(self: *Self) Error!void {
+    var is_escaped = false;
+    while (true) {
+        const c = try self.iter.next() orelse {
+            return Error.UnterminatedString;
+        };
+
+        if (!is_escaped and c.c == '"') {
+            break;
+        } else if (!is_escaped and c.c == '\\') {
+            is_escaped = true;
+        } else {
+            is_escaped = false;
+        }
+    }
+}
+
 fn skipSpaces(self: *Self) Codepoint.ParseError!void {
     try self.acceptWhile(Codepoint.isSpace);
 }
@@ -122,7 +141,7 @@ pub fn next(self: *Self) Error!?Token {
     try self.skipSpaces();
 
     const index = self.iter.byte_index;
-    const c = (try self.iter.next()) orelse {
+    const c = try self.iter.next() orelse {
         return null;
     };
 
@@ -132,9 +151,12 @@ pub fn next(self: *Self) Error!?Token {
         } else if (c.isDigit(10)) {
             try self.acceptDigits(10);
             break :t .number;
+        } else if (c.c == '"') {
+            try self.acceptString();
+            break :t .string;
         } else if (c.c == '+' or c.c == '-') {
-            const is_number =
-                if (try self.iter.peek()) |pk| pk.isDigit(10) else false;
+            const pk = try self.iter.peek();
+            const is_number = if (pk) |got| got.isDigit(10) else false;
 
             if (is_number) {
                 try self.acceptDigits(10);

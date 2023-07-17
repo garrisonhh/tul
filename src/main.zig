@@ -1,3 +1,4 @@
+const test_options = @import("test_options");
 const std = @import("std");
 const stdout = std.io.getStdOut().writer();
 const stderr = std.io.getStdErr().writer();
@@ -71,13 +72,35 @@ fn tulTestCase(expected: []const u8, actual: []const u8) TestCaseError!void {
         );
 
         return error.TestFailure;
+    } else if (test_options.verbose) {
+        try stderr.print(
+            \\[input]
+            \\{s}
+            \\[output]
+            \\{s}
+            \\
+            \\
+        ,
+            .{ actual, vm.get(got) },
+        );
     }
+}
+
+/// a test case that evaluates to itself
+fn selfEval(case: []const u8) [2][]const u8 {
+    return .{ case, case };
 }
 
 const tul_test_cases = [_][2][]const u8{
     .{ "true", "(and (not false) true)" },
     .{ "4", "(+ 2 2)" },
     .{ "6", " (/ (* 3 4) 2)" },
+    selfEval(
+        \\"a string to be parsed"
+    ),
+    selfEval(
+        \\"escape sequences: \r\n\"\'"
+    ),
 };
 
 test "tul-test-cases" {
