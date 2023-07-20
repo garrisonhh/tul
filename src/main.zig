@@ -92,15 +92,23 @@ fn selfEval(case: []const u8) [2][]const u8 {
 }
 
 const tul_test_cases = [_][2][]const u8{
-    .{ "true", "(and (not false) true)" },
-    .{ "4", "(+ 2 2)" },
-    .{ "6", " (/ (* 3 4) 2)" },
+    // literals
+    selfEval("0"),
+    selfEval(std.fmt.comptimePrint("{d}", .{std.math.minInt(i64)})),
+    selfEval(std.fmt.comptimePrint("{d}", .{std.math.maxInt(i64)})),
+    selfEval("true"),
+    selfEval("false"),
     selfEval(
         \\"a string to be parsed"
     ),
     selfEval(
-        \\"escape sequences: \r\n\"\'"
+        \\"escape sequences: \r\n\"'"
     ),
+
+    // basic operators
+    .{ "true", "(and (not false) true)" },
+    .{ "4", "(+ 2 2)" },
+    .{ "6", " (/ (* 3 4) 2)" },
 };
 
 test "tul-test-cases" {
