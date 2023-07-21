@@ -45,10 +45,10 @@ pub fn main() !void {
 const TestCaseError =
     ExecError ||
     @TypeOf(stderr).Error ||
-    error{TestFailure};
+    error{ TestFailure, UnreleasedMemory };
 
 /// a test case; both inputs should match
-fn tulTestCase(expected: []const u8, actual: []const u8) TestCaseError!void {
+fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
     const exp = try exec(expected);
     defer vm.deacq(exp);
     const got = try exec(actual);
@@ -71,7 +71,7 @@ fn tulTestCase(expected: []const u8, actual: []const u8) TestCaseError!void {
             .{ actual, vm.get(got), expected, vm.get(exp) },
         );
 
-        return error.TestFailure;
+        return TestCaseError.TestFailure;
     } else if (test_options.verbose) {
         try stderr.print(
             \\[input]
@@ -86,42 +86,9 @@ fn tulTestCase(expected: []const u8, actual: []const u8) TestCaseError!void {
     }
 }
 
-/// a test case that evaluates to itself
-fn selfEval(case: []const u8) [2][]const u8 {
-    return .{ case, case };
-}
-
-const tul_test_cases = [_][2][]const u8{
-    // literals
-    selfEval("0"),
-    selfEval(std.fmt.comptimePrint("{d}", .{std.math.minInt(i64)})),
-    selfEval(std.fmt.comptimePrint("{d}", .{std.math.maxInt(i64)})),
-    selfEval("true"),
-    selfEval("false"),
-    selfEval(
-        \\"a string to be parsed"
-    ),
-    selfEval(
-        \\"escape sequences: \r\n\"'"
-    ),
-
-    // basic operators
-    .{ "true", "(and (not false) true)" },
-    .{ "4", "(+ 2 2)" },
-    .{ "6", "(/ (* 3 4) 2)" },
-    .{
-        \\"hello, world!"
-        ,
-        \\(++ "hello" ", " "world" "!")
-    },
-};
-
-test "tul-test-cases" {
-    try init();
-    defer deinit();
-
-    for (tul_test_cases) |case| {
-        tulTestCase(case[0], case[1]) catch |e| {
+fn runTestSet(set: []const tests.Test) TestCaseError!void {
+    for (set) |case| {
+        runTest(case[0], case[1]) catch |e| {
             try stderr.print("test failed with: {}\n", .{e});
         };
 
@@ -129,7 +96,68 @@ test "tul-test-cases" {
             try stderr.print("unreleased memory after test:\n", .{});
             vm.inspectMemory();
 
-            return error.UnreleasedMemory;
+            return TestCaseError.UnreleasedMemory;
         }
     }
+}
+
+const tests = struct {
+    const Test = [2][]const u8;
+
+    fn selfEvalSet(comptime set: []const []const u8) [set.len]Test {
+        comptime {
+            var arr: [set.len]Test = undefined;
+            for (set, 0..) |str, i| {
+                arr[i] = .{ str, str };
+            }
+
+            return arr;
+        }
+    }
+
+    const literals = selfEvalSet(&.{
+        // bool
+        "true",
+        "false",
+
+        // int
+        "0",
+        std.fmt.comptimePrint("{d}", .{std.math.minInt(i64)}),
+        std.fmt.comptimePrint("{d}", .{std.math.maxInt(i64)}),
+
+        // string
+        \\"a string to be parsed"
+        ,
+        \\"escape sequences: \r\n\"'"
+        ,
+    }) ++ selfEvalSet(&b: {
+        // builtins
+        const values = std.enums.values(Object.Builtin);
+
+        var arr: [values.len][]const u8 = undefined;
+        for (values, 0..) |b, i| {
+            arr[i] = b.name();
+        }
+
+        break :b arr;
+    });
+
+    const operators = [_]Test{
+        .{ "true", "(and (not false) true)" },
+        .{ "4", "(+ 2 2)" },
+        .{ "6", "(/ (* 3 4) 2)" },
+        .{
+            \\"hello, world!"
+            ,
+            \\(++ "hello" ", " "world" "!")
+        },
+    };
+};
+
+test "tul-tests" {
+    try init();
+    defer deinit();
+
+    try runTestSet(&tests.literals);
+    try runTestSet(&tests.operators);
 }

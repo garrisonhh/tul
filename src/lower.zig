@@ -83,27 +83,45 @@ fn lowerApplied(bob: *Builder, ref: Object.Ref, arity: usize) Error!void {
     }
 }
 
+fn lowerApplication(
+    bob: *Builder,
+    expr: Object.Ref,
+    refs: []const Object.Ref,
+) Error!void {
+    // unit evaluates to unit
+    if (refs.len == 0) {
+        try bob.loadConst(expr);
+        return;
+    }
+
+    // function call
+    for (refs[1..]) |arg| {
+        try lowerValue(bob, arg);
+    }
+
+    const arity = refs.len - 1;
+    try lowerApplied(bob, refs[0], arity);
+}
+
+/// lower the evaluation of a tag as an identifier
+fn lowerValueIdent(bob: *Builder, ident: []const u8) Error!void {
+    if (Object.Builtin.fromName(ident)) |b| {
+        // builtins read as values evaluate to themselves
+        const ref = try vm.new(.{ .builtin = b });
+        defer vm.deacq(ref);
+        try bob.loadConst(ref);
+    } else {
+        // read a var
+        return LowerError.TodoVars;
+    }
+}
+
 /// lower a ref being read as a value
 fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
     switch (vm.get(ref).*) {
-        .tag => return Error.TodoVars,
-        .bool, .int, .string => try bob.loadConst(ref),
-        .builtin => @panic("TODO lower builtins"),
-        .list => |refs| {
-            // unit evaluates to unit
-            if (refs.len == 0) {
-                try bob.loadConst(ref);
-                return;
-            }
-
-            // function call
-            for (refs[1..]) |arg| {
-                try lowerValue(bob, arg);
-            }
-
-            const arity = refs.len - 1;
-            try lowerApplied(bob, refs[0], arity);
-        },
+        .bool, .int, .string, .builtin => try bob.loadConst(ref),
+        .tag => |ident| try lowerValueIdent(bob, ident),
+        .list => |refs| try lowerApplication(bob, ref, refs),
     }
 }
 
