@@ -178,7 +178,7 @@ const runtime = struct {
 
             // control flow
             .jump => {
-                try frame.jump(@intCast(usize, consumed));
+                try frame.jump(@intCast(consumed));
             },
 
             // stack manipulation

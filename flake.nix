@@ -12,7 +12,9 @@
       system = "x86_64-linux";
 
       # project reqs
-      pkgs = nixpkgs.legacyPackages.${system};
+      pkgs = (import nixpkgs) {
+        inherit system;
+      };
       zigpkgs = zig.packages.${system};
 
       inherit (pkgs.stdenv) mkDerivation;

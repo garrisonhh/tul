@@ -439,7 +439,7 @@ pub const Builder = struct {
     /// stores and acqs a ref to the builder, returns const index
     fn addConst(self: *Self, ref: Object.Ref) Allocator.Error!u32 {
         vm.acq(ref);
-        const index = @intCast(u32, self.consts.items.len);
+        const index: u32 = @intCast(self.consts.items.len);
         try self.consts.append(self.ally, ref);
         return index;
     }

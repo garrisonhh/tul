@@ -113,7 +113,7 @@ pub fn RefMap(comptime R: type, comptime T: type) type {
             }
 
             // create a new ref
-            const ref = R.init(@intCast(R.Int, self.items.items.len));
+            const ref = R.init(@intCast(self.items.items.len));
             try self.items.append(ally, null);
 
             // ensure that if all refs were freed at once, the unused arraylist
