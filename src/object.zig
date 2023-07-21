@@ -24,16 +24,39 @@ pub const Object = union(enum) {
         }
     };
 
+    /// builtin applicables
     pub const Builtin = enum {
-        list,
-        eql,
+        add,
+        sub,
+        mul,
+        div,
+        mod,
+        @"and",
+        @"or",
+        not,
 
-        // TODO quote, unquote
+        // TODO list, eql, quote, unquote
 
+        /// finds a builtin from its name
+        pub fn fromName(s: []const u8) ?Builtin {
+            return inline for (comptime std.enums.values(Builtin)) |b| {
+                if (std.mem.eql(u8, s, b.name())) break b;
+            } else null;
+        }
+
+        /// how this builtin is identified
         pub fn name(b: Builtin) []const u8 {
             return switch (b) {
-                inline .list => |tag| @tagName(tag),
-                .eql => "==",
+                .add => "+",
+                .sub => "-",
+                .mul => "*",
+                .div => "/",
+                .mod => "%",
+
+                inline .@"and",
+                .@"or",
+                .not,
+                => |tag| @tagName(tag),
             };
         }
     };

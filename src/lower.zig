@@ -10,44 +10,75 @@ const LowerError = error{
 
     // TODO eradicate these
     TodoVars,
-    TodoCallee,
+    TodoApplied,
 };
 
 pub const Error = Allocator.Error || LowerError;
 
-/// lower a ref being called as a function
-fn lowerCallee(bob: *Builder, ref: Object.Ref, arity: usize) Error!void {
-    switch (vm.get(ref).*) {
-        .tag => |ident| {
-            // these operators act like a reduction with pure function with two
-            // arguments
-            const bin_reduce_ops = comptime std.ComptimeStringMap(bc.Inst, .{
-                .{ "+", .add },
-                .{ "-", .sub },
-                .{ "*", .mul },
-                .{ "/", .div },
-                .{ "%", .mod },
-                .{ "and", .land },
-                .{ "or", .lor },
-            });
+/// metadata about how to lower a builtin
+const BuiltinMeta = union(enum) {
+    const Reduction = struct {
+        inst: bc.Inst,
+        min_arity: usize,
+    };
 
-            // these operators act like a pure function consuming and producing
-            // a single value
-            const in_out_ops = comptime std.ComptimeStringMap(bc.Inst, .{
-                .{ "not", .lnot },
-            });
+    unary: bc.Inst,
+    reduction: Reduction,
+};
 
-            if (bin_reduce_ops.get(ident)) |inst| {
-                if (arity < 2) return LowerError.BadArity;
-                for (0..arity - 1) |_| try bob.addInst(inst);
-            } else if (in_out_ops.get(ident)) |inst| {
-                if (arity != 1) return LowerError.BadArity;
-                try bob.addInst(inst);
-            } else {
-                return Error.TodoCallee;
+fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
+    const mk = struct {
+        fn unary(inst: bc.Inst) BuiltinMeta {
+            return .{ .unary = inst };
+        }
+
+        fn reduction(inst: bc.Inst, min_arity: usize) BuiltinMeta {
+            return .{ .reduction = .{ .inst = inst, .min_arity = min_arity } };
+        }
+    };
+
+    return switch (b) {
+        .add => mk.reduction(.add, 2),
+        .sub => mk.reduction(.sub, 2),
+        .mul => mk.reduction(.mul, 2),
+        .div => mk.reduction(.div, 2),
+        .mod => mk.reduction(.mod, 2),
+        .@"and" => mk.reduction(.land, 2),
+        .@"or" => mk.reduction(.lor, 2),
+        .not => mk.unary(.lnot),
+    };
+}
+
+fn lowerAppliedBuiltin(
+    bob: *Builder,
+    b: Object.Builtin,
+    arity: usize,
+) Error!void {
+    switch (getBuiltinMetadata(b)) {
+        .unary => |inst| {
+            if (arity != 1) return LowerError.BadArity;
+            try bob.addInst(inst);
+        },
+        .reduction => |red| {
+            if (arity < red.min_arity) return LowerError.BadArity;
+            for (0..arity - 1) |_| {
+                try bob.addInst(red.inst);
             }
         },
-        else => return Error.TodoCallee,
+    }
+}
+
+/// lower a ref being called as a function
+fn lowerApplied(bob: *Builder, ref: Object.Ref, arity: usize) Error!void {
+    switch (vm.get(ref).*) {
+        .tag => |ident| {
+            if (Object.Builtin.fromName(ident)) |b| {
+                try lowerAppliedBuiltin(bob, b, arity);
+            } else {
+                return Error.TodoApplied;
+            }
+        },
+        else => return Error.TodoApplied,
     }
 }
 
@@ -70,7 +101,7 @@ fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
             }
 
             const arity = refs.len - 1;
-            try lowerCallee(bob, refs[0], arity);
+            try lowerApplied(bob, refs[0], arity);
         },
     }
 }
