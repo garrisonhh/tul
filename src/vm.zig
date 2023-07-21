@@ -44,12 +44,16 @@ pub fn allocated() usize {
     return count;
 }
 
-/// clones the init object and places it in gc memory with 1 reference
-pub fn new(init: Object) Allocator.Error!Object.Ref {
-    const obj = try init.clone(ally);
+/// without cloning, places an object into gc memory with 1 reference
+pub fn put(obj: Object) Allocator.Error!Object.Ref {
     const rc = Object.Rc.init(obj);
     const ref = try mem.put(ally, rc);
     return ref;
+}
+
+/// clones the init object and places it in gc memory with 1 reference
+pub fn new(init: Object) Allocator.Error!Object.Ref {
+    return try put(try init.clone(ally));
 }
 
 fn ReturnType(comptime func: anytype) type {
@@ -247,6 +251,21 @@ const runtime = struct {
 
                 const val = !get(ref).bool;
                 frame.push(try new(.{ .bool = val }));
+            },
+
+            // strings
+            .concat => {
+                const refs = frame.popArray(2);
+                defer deacqAll(&refs);
+
+                const lhs = get(refs[0]).string;
+                const rhs = get(refs[1]).string;
+
+                const str = try ally.alloc(u8, lhs.len + rhs.len);
+                @memcpy(str[0..lhs.len], lhs);
+                @memcpy(str[lhs.len..], rhs);
+
+                frame.push(try put(.{ .string = str }));
             },
         }
     }

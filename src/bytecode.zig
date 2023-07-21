@@ -77,6 +77,9 @@ pub const Inst = enum(u8) {
     lor,
     lnot,
 
+    // strings
+    concat,
+
     /// comptime mapping of inst -> metadata
     fn meta(comptime self: Self) Meta {
         comptime {
@@ -94,6 +97,7 @@ pub const Inst = enum(u8) {
                 .inspect,
                 .lnot,
                 => m(1, 1, 0),
+
                 .add,
                 .sub,
                 .mul,
@@ -101,6 +105,7 @@ pub const Inst = enum(u8) {
                 .mod,
                 .land,
                 .lor,
+                .concat,
                 => m(2, 1, 0),
             };
         }

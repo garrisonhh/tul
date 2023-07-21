@@ -46,6 +46,7 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
         .@"and" => mk.reduction(.land, 2),
         .@"or" => mk.reduction(.lor, 2),
         .not => mk.unary(.lnot),
+        .concat => mk.reduction(.concat, 2),
     };
 }
 

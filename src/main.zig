@@ -109,6 +109,11 @@ const tul_test_cases = [_][2][]const u8{
     .{ "true", "(and (not false) true)" },
     .{ "4", "(+ 2 2)" },
     .{ "6", "(/ (* 3 4) 2)" },
+    .{
+        \\"hello, world!"
+        ,
+        \\(++ "hello" ", " "world" "!")
+    },
 };
 
 test "tul-test-cases" {

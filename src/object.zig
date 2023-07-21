@@ -31,9 +31,12 @@ pub const Object = union(enum) {
         mul,
         div,
         mod,
+
         @"and",
         @"or",
         not,
+
+        concat,
 
         // TODO list, eql, quote, unquote
 
@@ -52,6 +55,7 @@ pub const Object = union(enum) {
                 .mul => "*",
                 .div => "/",
                 .mod => "%",
+                .concat => "++",
 
                 inline .@"and",
                 .@"or",
@@ -120,10 +124,11 @@ pub const Object = union(enum) {
             => |data, tag| data == @field(that, @tagName(tag)),
 
             // mem comparison
-            inline .string, .tag => |str, tag| mem: {
-                const other_str = @field(that.*, @tagName(tag));
-                const Item = @typeInfo(@TypeOf(str.ptr)).Pointer.child;
-                break :mem std.mem.eql(Item, str, other_str);
+            inline .string, .tag => |slice, tag| mem: {
+                const Item = @typeInfo(@TypeOf(slice)).Pointer.child;
+
+                const other_slice = @field(that.*, @tagName(tag));
+                break :mem std.mem.eql(Item, slice, other_slice);
             },
 
             // deep comparison
