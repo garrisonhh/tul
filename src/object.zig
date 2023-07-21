@@ -36,6 +36,7 @@ pub const Object = union(enum) {
         @"or",
         not,
 
+        list,
         concat,
 
         // TODO list, eql, quote, unquote
@@ -60,6 +61,7 @@ pub const Object = union(enum) {
                 inline .@"and",
                 .@"or",
                 .not,
+                .list,
                 => |tag| @tagName(tag),
             };
         }

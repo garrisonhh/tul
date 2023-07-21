@@ -33,14 +33,14 @@ pub const Inst = enum(u8) {
         };
 
         /// number of refs popped
-        inputs: comptime_int,
+        inputs: ?comptime_int,
         /// number of refs pushed
         outputs: comptime_int,
         /// number of extra bytes consumed in interpretation
         consumes: comptime_int,
 
         fn of(
-            comptime inputs: comptime_int,
+            comptime inputs: ?comptime_int,
             comptime outputs: comptime_int,
             comptime consumes: comptime_int,
         ) Meta {
@@ -80,6 +80,9 @@ pub const Inst = enum(u8) {
     // strings
     concat,
 
+    // lists
+    list,
+
     /// comptime mapping of inst -> metadata
     fn meta(comptime self: Self) Meta {
         comptime {
@@ -93,6 +96,7 @@ pub const Inst = enum(u8) {
                 .over => m(2, 3, 0),
                 .rot => m(3, 3, 0),
                 .drop => m(1, 0, 0),
+                .list => m(null, 1, 4),
 
                 .inspect,
                 .lnot,
@@ -522,6 +526,20 @@ pub const Frame = struct {
         const arr = self.peekArray(N);
         self.stack.shrinkRetainingCapacity(self.stack.items.len - N);
         return arr;
+    }
+
+    pub fn popSliceAlloc(
+        self: *Self,
+        ally: Allocator,
+        len: usize,
+    ) Allocator.Error![]Object.Ref {
+        self.assertStack(len);
+
+        const index = self.stack.items.len - len;
+        defer self.stack.shrinkRetainingCapacity(index);
+
+        const slice = self.stack.items[index..];
+        return try ally.dupe(Object.Ref, slice);
     }
 
     pub fn peek(self: Self) Object.Ref {

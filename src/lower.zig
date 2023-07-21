@@ -24,6 +24,8 @@ const BuiltinMeta = union(enum) {
 
     unary: bc.Inst,
     reduction: Reduction,
+
+    list,
 };
 
 fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
@@ -46,6 +48,7 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
         .@"and" => mk.reduction(.land, 2),
         .@"or" => mk.reduction(.lor, 2),
         .not => mk.unary(.lnot),
+        .list => .list,
         .concat => mk.reduction(.concat, 2),
     };
 }
@@ -65,6 +68,9 @@ fn lowerAppliedBuiltin(
             for (0..arity - 1) |_| {
                 try bob.addInst(red.inst);
             }
+        },
+        .list => {
+            try bob.addInstC(.list, @as(u32, @intCast(arity)));
         },
     }
 }

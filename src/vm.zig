@@ -267,6 +267,15 @@ const runtime = struct {
 
                 frame.push(try put(.{ .string = str }));
             },
+
+            // lists
+            .list => {
+                // technically, this should deacq all refs when popping and then
+                // reacq when placing on the list, but I think that is
+                // unnecessary work
+                const list = try frame.popSliceAlloc(ally, consumed);
+                frame.push(try put(.{ .list = list }));
+            },
         }
     }
 

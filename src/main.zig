@@ -89,7 +89,19 @@ fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
 fn runTestSet(set: []const tests.Test) TestCaseError!void {
     for (set) |case| {
         runTest(case[0], case[1]) catch |e| {
-            try stderr.print("test failed with: {}\n", .{e});
+            try stderr.print(
+                \\test failed with: {[err]}
+                \\[actual]
+                \\{[actual]s}
+                \\[expected]
+                \\{[expected]s}
+            ,
+                .{
+                    .err = e,
+                    .actual = case[0],
+                    .expected = case[1],
+                },
+            );
         };
 
         if (vm.allocated() > 0) {
@@ -103,6 +115,10 @@ fn runTestSet(set: []const tests.Test) TestCaseError!void {
 
 const tests = struct {
     const Test = [2][]const u8;
+
+    fn selfEval(str: []const u8) Test {
+        return .{ str, str };
+    }
 
     fn selfEvalSet(comptime set: []const []const u8) [set.len]Test {
         comptime {
@@ -151,10 +167,14 @@ const tests = struct {
             ,
             \\(++ "hello" ", " "world" "!")
         },
+        selfEval("(list)"),
+        selfEval("(list list)"),
+        selfEval("(list 1 2 3)"),
+        selfEval("(list (list (list 1) 2) 3)"),
     };
 };
 
-test "tul-tests" {
+test "tul" {
     try init();
     defer deinit();
 
