@@ -77,10 +77,8 @@ pub const Inst = enum(u8) {
     lor,
     lnot,
 
-    // strings
+    // strings/lists
     concat,
-
-    // lists
     list,
 
     /// comptime mapping of inst -> metadata
@@ -532,7 +530,7 @@ pub const Frame = struct {
         self: *Self,
         ally: Allocator,
         len: usize,
-    ) Allocator.Error![]Object.Ref {
+    ) Allocator.Error![]const Object.Ref {
         self.assertStack(len);
 
         const index = self.stack.items.len - len;

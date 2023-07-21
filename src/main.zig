@@ -171,6 +171,10 @@ const tests = struct {
         selfEval("(list list)"),
         selfEval("(list 1 2 3)"),
         selfEval("(list (list (list 1) 2) 3)"),
+        .{
+            "(list 1 2 3 4 5 6)",
+            "(++ (list 1 2 3) (list 4 5 6))",
+        },
     };
 };
 

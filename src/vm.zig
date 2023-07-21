@@ -253,22 +253,37 @@ const runtime = struct {
                 frame.push(try new(.{ .bool = val }));
             },
 
-            // strings
+            // strings/lists
             .concat => {
                 const refs = frame.popArray(2);
                 defer deacqAll(&refs);
 
-                const lhs = get(refs[0]).string;
-                const rhs = get(refs[1]).string;
+                const lhs_ref = get(refs[0]);
+                const rhs_ref = get(refs[1]);
 
-                const str = try ally.alloc(u8, lhs.len + rhs.len);
-                @memcpy(str[0..lhs.len], lhs);
-                @memcpy(str[lhs.len..], rhs);
+                if (lhs_ref.* == .string) {
+                    const lhs = lhs_ref.string;
+                    const rhs = rhs_ref.string;
 
-                frame.push(try put(.{ .string = str }));
+                    const str = try std.mem.concat(ally, u8, &.{ lhs, rhs });
+
+                    frame.push(try put(.{ .string = str }));
+                } else if (lhs_ref.* == .list) {
+                    const lhs = lhs_ref.list;
+                    const rhs = rhs_ref.list;
+
+                    const list = try std.mem.concat(
+                        ally,
+                        Object.Ref,
+                        &.{ lhs, rhs },
+                    );
+                    acqAll(list);
+
+                    frame.push(try put(.{ .list = list }));
+                } else {
+                    @panic("TODO runtime error; mismatched concat");
+                }
             },
-
-            // lists
             .list => {
                 // technically, this should deacq all refs when popping and then
                 // reacq when placing on the list, but I think that is
