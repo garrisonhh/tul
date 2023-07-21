@@ -12,6 +12,7 @@ pub fn formatObject(
     switch (obj.*) {
         .bool => |b| try writer.print("{}", .{b}),
         .int => |n| try writer.print("{}", .{n}),
+        .builtin => |b| try writer.print("<builtin>{s}", .{b.name()}),
         .string => |s| try writer.print("\"{}\"", .{std.zig.fmtEscapes(s)}),
         .tag => |t| try writer.print("@{s}", .{t}),
         .list => |refs| {

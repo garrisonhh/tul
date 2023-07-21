@@ -56,6 +56,7 @@ fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
     switch (vm.get(ref).*) {
         .tag => return Error.TodoVars,
         .bool, .int, .string => try bob.loadConst(ref),
+        .builtin => @panic("TODO lower builtins"),
         .list => |refs| {
             // unit evaluates to unit
             if (refs.len == 0) {

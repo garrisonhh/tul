@@ -123,13 +123,9 @@ fn acceptString(self: *Self) Error!void {
             return Error.UnterminatedString;
         };
 
-        if (!is_escaped and c.c == '"') {
-            break;
-        } else if (!is_escaped and c.c == '\\') {
-            is_escaped = true;
-        } else {
-            is_escaped = false;
-        }
+        if (!is_escaped and c.c == '"') break;
+
+        is_escaped = c.c == '\\' and !is_escaped;
     }
 }
 
@@ -170,7 +166,7 @@ pub fn next(self: *Self) Error!?Token {
             break :t .ident;
         } else {
             std.debug.print("disallowed character: `{}`\n", .{c});
-            std.debug.print("blk: {}\n", .{c.getUnicodeBlock()});
+            std.debug.print("in unicode block: {}\n", .{c.getUnicodeBlock()});
             return Error.DisallowedCharacter;
         }
     };

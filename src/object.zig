@@ -4,6 +4,7 @@ const com = @import("common");
 const vm = @import("vm.zig");
 const formatObject = @import("formatters.zig").formatObject;
 
+/// canonical tul object
 pub const Object = union(enum) {
     const Self = @This();
     pub const Tag = std.meta.Tag(Self);
@@ -23,8 +24,23 @@ pub const Object = union(enum) {
         }
     };
 
+    pub const Builtin = enum {
+        list,
+        eql,
+
+        // TODO quote, unquote
+
+        pub fn name(b: Builtin) []const u8 {
+            return switch (b) {
+                inline .list => |tag| @tagName(tag),
+                .eql => "==",
+            };
+        }
+    };
+
     bool: bool,
     int: i64,
+    builtin: Builtin,
     /// owned string
     string: []const u8,
     /// owned string
@@ -36,7 +52,7 @@ pub const Object = union(enum) {
 
     pub fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
-            .bool, .int => {},
+            .bool, .int, .builtin => {},
             .string, .tag => |str| ally.free(str),
             .list => |refs| {
                 vm.deacqAll(refs);
@@ -48,7 +64,7 @@ pub const Object = union(enum) {
     pub fn clone(self: *const Self, ally: Allocator) Allocator.Error!Self {
         var obj = self.*;
         switch (obj) {
-            .bool, .int => {},
+            .bool, .int, .builtin => {},
             // shallow dupe
             .string, .tag => |*str| {
                 const Item = @typeInfo(@TypeOf(str.ptr)).Pointer.child;
@@ -77,6 +93,7 @@ pub const Object = union(enum) {
             // direct comparison
             inline .bool,
             .int,
+            .builtin,
             => |data, tag| data == @field(that, @tagName(tag)),
 
             // mem comparison

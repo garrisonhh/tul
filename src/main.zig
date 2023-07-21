@@ -108,7 +108,7 @@ const tul_test_cases = [_][2][]const u8{
     // basic operators
     .{ "true", "(and (not false) true)" },
     .{ "4", "(+ 2 2)" },
-    .{ "6", " (/ (* 3 4) 2)" },
+    .{ "6", "(/ (* 3 4) 2)" },
 };
 
 test "tul-test-cases" {
