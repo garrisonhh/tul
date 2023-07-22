@@ -38,6 +38,8 @@ pub const Object = union(enum) {
         @"or",
         not,
 
+        eq,
+
         list,
         concat,
 
@@ -60,9 +62,16 @@ pub const Object = union(enum) {
                 .mul => "*",
                 .div => "/",
                 .mod => "%",
+                .eq => "==",
                 .concat => "++",
 
-                inline .inspect, .@"and", .@"or", .not, .list, .@"if" => |tag| @tagName(tag),
+                inline .inspect,
+                .@"and",
+                .@"or",
+                .not,
+                .list,
+                .@"if",
+                => |tag| @tagName(tag),
             };
         }
     };

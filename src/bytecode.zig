@@ -80,6 +80,9 @@ pub const Inst = enum(u8) {
     lor,
     lnot,
 
+    // comparison
+    eq,
+
     // strings/lists
     concat,
     list,
@@ -111,6 +114,7 @@ pub const Inst = enum(u8) {
                 .mod,
                 .land,
                 .lor,
+                .eq,
                 .concat,
                 => m(2, 1, 0),
             };

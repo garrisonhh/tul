@@ -18,12 +18,19 @@ pub const Error = Allocator.Error || LowerError;
 /// metadata about how to lower a builtin. there are many more builtins than
 /// there are unique methods to lower builtins, this abstracts over that idea
 const BuiltinMeta = union(enum) {
+    const Pure = struct {
+        inst: bc.Inst,
+        params: usize,
+    };
+
     const Reduction = struct {
         inst: bc.Inst,
         min_arity: usize,
     };
 
-    unary: bc.Inst,
+    /// takes an exact number of parameters, outputs one value
+    pure: Pure,
+    /// reduce over some number of ops
     reduction: Reduction,
 
     list,
@@ -32,8 +39,8 @@ const BuiltinMeta = union(enum) {
 
 fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
     const mk = struct {
-        fn unary(inst: bc.Inst) BuiltinMeta {
-            return .{ .unary = inst };
+        fn pure(inst: bc.Inst, params: usize) BuiltinMeta {
+            return .{ .pure = .{ .inst = inst, .params = params } };
         }
 
         fn reduction(inst: bc.Inst, min_arity: usize) BuiltinMeta {
@@ -42,7 +49,7 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
     };
 
     return switch (b) {
-        .inspect => mk.unary(.inspect),
+        .inspect => mk.pure(.inspect, 1),
         .add => mk.reduction(.add, 2),
         .sub => mk.reduction(.sub, 2),
         .mul => mk.reduction(.mul, 2),
@@ -50,7 +57,8 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
         .mod => mk.reduction(.mod, 2),
         .@"and" => mk.reduction(.land, 2),
         .@"or" => mk.reduction(.lor, 2),
-        .not => mk.unary(.lnot),
+        .not => mk.pure(.lnot, 1),
+        .eq => mk.pure(.eq, 2),
         .list => .list,
         .concat => mk.reduction(.concat, 2),
         .@"if" => .@"if",
@@ -63,16 +71,17 @@ fn lowerAppliedBuiltin(
     args: []const Object.Ref,
 ) Error!void {
     switch (getBuiltinMetadata(b)) {
-        .unary => |inst| {
-            if (args.len != 1) return LowerError.BadArity;
-            try lowerValue(bob, args[0]);
-            try bob.addInst(inst);
+        .pure => |pure| {
+            if (args.len != pure.params) return LowerError.BadArity;
+            try lowerValues(bob, args);
+            try bob.addInst(pure.inst);
         },
         .reduction => |red| {
             if (args.len < red.min_arity) return LowerError.BadArity;
 
-            try lowerValues(bob, args);
-            for (0..args.len - 1) |_| {
+            try lowerValue(bob, args[0]);
+            for (1..args.len) |i| {
+                try lowerValue(bob, args[i]);
                 try bob.addInst(red.inst);
             }
         },

@@ -105,17 +105,20 @@ fn runTestSet(set: []const tests.Test) TestCaseError!void {
         runTest(case[0], case[1]) catch |e| {
             try stderr.print(
                 \\test failed with: {[err]}
-                \\[actual]
-                \\{[actual]s}
                 \\[expected]
                 \\{[expected]s}
+                \\[actual]
+                \\{[actual]s}
+                \\
             ,
                 .{
                     .err = e,
-                    .actual = case[0],
-                    .expected = case[1],
+                    .expected = case[0],
+                    .actual = case[1],
                 },
             );
+
+            return e;
         };
 
         if (vm.allocated() > 0) {
@@ -176,6 +179,15 @@ const tests = struct {
         .{ "true", "(and (not false) true)" },
         .{ "4", "(+ 2 2)" },
         .{ "6", "(/ (* 3 4) 2)" },
+        .{ "true", "(== 3 3)" },
+        .{ "false", "(== -123 4)" },
+        .{ "false", "(== false 4)" },
+        .{ "true", "(== true true)" },
+        .{ "true", "(== false false)" },
+        .{ "false", "(== true false)" },
+        .{ "true", "(== (list 1 2) (list 1 2))" },
+        .{ "true", "(== (list 1 (list 2 3)) (list 1 (list 2 3)))" },
+        .{ "false", "(== (list 1 2) (list 420))" },
         .{
             \\"hello, world!"
             ,

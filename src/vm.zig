@@ -264,6 +264,16 @@ const runtime = struct {
                 frame.push(try new(.{ .bool = val }));
             },
 
+            // comparison
+            .eq => {
+                const refs = frame.popArray(2);
+                defer deacqAll(&refs);
+
+                const res = Object.eql(refs[0], refs[1]);
+
+                frame.push(try new(.{ .bool = res }));
+            },
+
             // strings/lists
             .concat => {
                 const refs = frame.popArray(2);
