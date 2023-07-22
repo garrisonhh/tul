@@ -26,6 +26,8 @@ pub const Object = union(enum) {
 
     /// builtin applicables
     pub const Builtin = enum {
+        inspect,
+
         add,
         sub,
         mul,
@@ -39,7 +41,7 @@ pub const Object = union(enum) {
         list,
         concat,
 
-        // TODO list, eql, quote, unquote
+        // TODO eql, quote, unquote
 
         /// finds a builtin from its name
         pub fn fromName(s: []const u8) ?Builtin {
@@ -58,7 +60,8 @@ pub const Object = union(enum) {
                 .mod => "%",
                 .concat => "++",
 
-                inline .@"and",
+                inline .inspect,
+                .@"and",
                 .@"or",
                 .not,
                 .list,

@@ -40,6 +40,7 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
     };
 
     return switch (b) {
+        .inspect => mk.unary(.inspect),
         .add => mk.reduction(.add, 2),
         .sub => mk.reduction(.sub, 2),
         .mul => mk.reduction(.mul, 2),
