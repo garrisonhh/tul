@@ -15,7 +15,8 @@ const LowerError = error{
 
 pub const Error = Allocator.Error || LowerError;
 
-/// metadata about how to lower a builtin
+/// metadata about how to lower a builtin. there are many more builtins than
+/// there are unique methods to lower builtins, this abstracts over that idea
 const BuiltinMeta = union(enum) {
     const Reduction = struct {
         inst: bc.Inst,
@@ -26,6 +27,7 @@ const BuiltinMeta = union(enum) {
     reduction: Reduction,
 
     list,
+    @"if",
 };
 
 fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
@@ -51,45 +53,53 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
         .not => mk.unary(.lnot),
         .list => .list,
         .concat => mk.reduction(.concat, 2),
+        .@"if" => .@"if",
     };
 }
 
 fn lowerAppliedBuiltin(
     bob: *Builder,
     b: Object.Builtin,
-    arity: usize,
+    args: []const Object.Ref,
 ) Error!void {
     switch (getBuiltinMetadata(b)) {
         .unary => |inst| {
-            if (arity != 1) return LowerError.BadArity;
+            if (args.len != 1) return LowerError.BadArity;
+            try lowerValue(bob, args[0]);
             try bob.addInst(inst);
         },
         .reduction => |red| {
-            if (arity < red.min_arity) return LowerError.BadArity;
-            for (0..arity - 1) |_| {
+            if (args.len < red.min_arity) return LowerError.BadArity;
+
+            try lowerValues(bob, args);
+            for (0..args.len - 1) |_| {
                 try bob.addInst(red.inst);
             }
         },
         .list => {
-            try bob.addInstC(.list, @as(u32, @intCast(arity)));
+            try lowerValues(bob, args);
+            // TODO in future zig, this explicit `@as` should be unnecessary
+            try bob.addInstC(.list, @as(u32, @intCast(args.len)));
+        },
+        .@"if" => {
+            if (args.len != 3) return LowerError.BadArity;
+
+            const cond = args[0];
+            const if_true = args[1];
+            const if_false = args[2];
+
+            try lowerValue(bob, cond);
+            const if_true_back = try bob.addInstBackRef(.branch);
+            try lowerValue(bob, if_false);
+            const end_back = try bob.addInstBackRef(.jump);
+            try bob.nail(if_true_back);
+            try lowerValue(bob, if_true);
+            try bob.nail(end_back);
         },
     }
 }
 
-/// lower a ref being called as a function
-fn lowerApplied(bob: *Builder, ref: Object.Ref, arity: usize) Error!void {
-    switch (vm.get(ref).*) {
-        .tag => |ident| {
-            if (Object.Builtin.fromName(ident)) |b| {
-                try lowerAppliedBuiltin(bob, b, arity);
-            } else {
-                return Error.TodoApplied;
-            }
-        },
-        else => return Error.TodoApplied,
-    }
-}
-
+/// lower the evaluation of an application
 fn lowerApplication(
     bob: *Builder,
     expr: Object.Ref,
@@ -102,12 +112,19 @@ fn lowerApplication(
     }
 
     // function call
-    for (refs[1..]) |arg| {
-        try lowerValue(bob, arg);
+    const applied = vm.get(refs[0]);
+    const args = refs[1..];
+
+    // builtins are a special case
+    if (applied.* == .tag) {
+        if (Object.Builtin.fromName(applied.tag)) |b| {
+            try lowerAppliedBuiltin(bob, b, args);
+            return;
+        }
     }
 
-    const arity = refs.len - 1;
-    try lowerApplied(bob, refs[0], arity);
+    // evaluate applied as a value and call it
+    return Error.TodoApplied;
 }
 
 /// lower the evaluation of a tag as an identifier
@@ -121,6 +138,10 @@ fn lowerValueIdent(bob: *Builder, ident: []const u8) Error!void {
         // read a var
         return LowerError.TodoVars;
     }
+}
+
+fn lowerValues(bob: *Builder, refs: []const Object.Ref) Error!void {
+    for (refs) |ref| try lowerValue(bob, ref);
 }
 
 /// lower a ref being read as a value

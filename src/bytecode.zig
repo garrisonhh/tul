@@ -9,6 +9,8 @@ const in_debug = @import("builtin").mode == .Debug;
 pub const Inst = enum(u8) {
     const Self = @This();
 
+    const address_bytes = 4;
+
     const Meta = struct {
         /// tag of the meta type fields
         const FieldTag = t: {
@@ -57,7 +59,8 @@ pub const Inst = enum(u8) {
     load_const,
     inspect,
 
-    jump,
+    jump, // jump to addr
+    branch, // if cond, jump to addr
 
     swap, // x y - y x
     dup, // x - x x
@@ -88,7 +91,8 @@ pub const Inst = enum(u8) {
             return switch (self) {
                 .nop => m(0, 0, 0),
                 .load_const => m(0, 1, 4),
-                .jump => m(0, 0, 4),
+                .jump => m(0, 0, address_bytes),
+                .branch => m(1, 0, address_bytes),
                 .swap => m(2, 2, 0),
                 .dup => m(1, 2, 0),
                 .over => m(2, 3, 0),
@@ -151,11 +155,15 @@ pub const Inst = enum(u8) {
 
         /// set state to an absolute index
         fn jump(iter: *Iterator, index: usize) Error!void {
-            if (index >= iter.start.len) {
+            if (index > iter.start.len) {
                 return Error.InvalidJump;
             }
 
             iter.cur = iter.start[index..];
+        }
+
+        pub fn addr(iter: *const Iterator) usize {
+            return @intFromPtr(iter.cur.ptr) - @intFromPtr(iter.start.ptr);
         }
 
         /// iterates to next instruction, writing any consumed bytes to the
@@ -391,8 +399,11 @@ pub const Function = struct {
     ) (Inst.Iterator.Error || @TypeOf(writer).Error)!void {
         var insts = Inst.iterator(self.code);
         var consumed: u64 = undefined;
-        while (try insts.next(&consumed)) |inst| {
-            try writer.print("{s} ", .{@tagName(inst)});
+        while (true) {
+            const addr = insts.addr();
+            const inst = try insts.next(&consumed) orelse break;
+
+            try writer.print("{d:>4} {s} ", .{ addr, @tagName(inst) });
 
             if (inst == .load_const) {
                 const ref = self.consts[consumed];
@@ -413,9 +424,18 @@ pub const Function = struct {
 pub const Builder = struct {
     const Self = @This();
 
+    const BackRefMeta = struct {
+        index: usize,
+        nailed: bool,
+    };
+
+    pub const BackRef = com.Ref(.backref, 4);
+    const BackRefMap = com.RefMap(BackRef, BackRefMeta);
+
     ally: Allocator,
     consts: std.ArrayListUnmanaged(Object.Ref) = .{},
     code: std.ArrayListUnmanaged(u8) = .{},
+    backrefs: BackRefMap = .{},
 
     pub fn init(ally: Allocator) Self {
         return .{ .ally = ally };
@@ -425,10 +445,32 @@ pub const Builder = struct {
         vm.deacqAll(self.consts.items);
         self.consts.deinit(self.ally);
         self.code.deinit(self.ally);
+        self.backrefs.deinit(self.ally);
+    }
+
+    /// sanity check for debugging backref code
+    fn fullyNailed(self: *const Self) bool {
+        var nailed = true;
+
+        var nails = self.backrefs.iterator();
+        while (nails.nextEntry()) |entry| {
+            const backref = entry.ref;
+            const meta = entry.ptr;
+
+            if (!meta.nailed) {
+                std.debug.print("[unnailed] {p}\n", .{backref});
+                nailed = false;
+            }
+        }
+
+        return nailed;
     }
 
     /// frees all builder memory, you can safely ignore deinit if you call this
     pub fn build(self: *Self) Allocator.Error!Function {
+        std.debug.assert(self.fullyNailed());
+        self.backrefs.deinit(self.ally);
+
         return Function{
             .consts = try self.consts.toOwnedSlice(self.ally),
             .code = try self.code.toOwnedSlice(self.ally),
@@ -452,6 +494,11 @@ pub const Builder = struct {
         try self.addInstC(.load_const, ld);
     }
 
+    /// add an instruction with no consumed data
+    pub fn addInst(self: *Self, inst: Inst) Allocator.Error!void {
+        try self.code.append(self.ally, @intFromEnum(inst));
+    }
+
     fn Consumed(comptime inst: Inst) type {
         return std.meta.Int(.unsigned, 8 * inst.getMeta(.consumes));
     }
@@ -468,9 +515,44 @@ pub const Builder = struct {
         try self.code.appendSlice(self.ally, &consumed);
     }
 
-    /// add an instruction with no consumed data
-    pub fn addInst(self: *Self, inst: Inst) Allocator.Error!void {
-        try self.code.append(self.ally, @intFromEnum(inst));
+    /// add a control flow instruction with a backreferenced address as its
+    /// consumed value
+    pub fn addInstBackRef(self: *Self, inst: Inst) Allocator.Error!BackRef {
+        // verify for debug
+        std.debug.assert(switch (inst) {
+            .jump, .branch => true,
+            else => false,
+        });
+
+        // add inst with dummy value
+        try self.addInst(inst);
+        const index = self.code.items.len;
+        try self.code.appendNTimes(self.ally, 0, Inst.address_bytes);
+
+        return try self.backrefs.put(self.ally, .{
+            .index = index,
+            .nailed = false,
+        });
+    }
+
+    /// writes current instruction address to the backref
+    pub fn nail(self: *Self, back: BackRef) Allocator.Error!void {
+        const meta = self.backrefs.get(back);
+        std.debug.assert(!meta.nailed);
+
+        // get consumed int slice
+        const start = meta.index;
+        const stop = meta.index + Inst.address_bytes;
+        const slice = self.code.items[start..stop];
+
+        // get slice for address
+        const addr: u32 = @intCast(self.code.items.len);
+        const bytes = com.bytes.bytesFromInt(u32, addr, .Big);
+
+        @memcpy(slice, &bytes);
+
+        // check boxes
+        meta.nailed = true;
     }
 };
 
@@ -492,7 +574,6 @@ pub const Frame = struct {
     }
 
     pub fn deinit(self: *Self, ally: Allocator) void {
-        std.debug.assert(self.stack.items.len == 0);
         self.stack.deinit(ally);
     }
 

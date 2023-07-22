@@ -1,3 +1,4 @@
+const builtin = @import("builtin");
 const test_options = @import("test_options");
 const std = @import("std");
 const stdout = std.io.getStdOut().writer();
@@ -30,6 +31,11 @@ fn exec(program: []const u8) ExecError!Object.Ref {
     const func = try lower.lower(ally, code);
     defer func.deinit(ally);
 
+    if (builtin.is_test and test_options.verbose) {
+        stderr.print("[executing bytecode]\n", .{}) catch {};
+        func.display(stderr) catch {};
+    }
+
     return try vm.run(func);
 }
 
@@ -37,7 +43,15 @@ pub fn main() !void {
     try init();
     defer deinit();
 
-    @panic("TODO");
+    const code =
+        \\(if false 1 2)
+        \\
+    ;
+
+    const out = try exec(code);
+    defer vm.deacq(out);
+
+    try stdout.print("{}\n", .{vm.get(out)});
 }
 
 // testing =====================================================================
@@ -175,6 +189,8 @@ const tests = struct {
             "(list 1 2 3 4 5 6)",
             "(++ (list 1 2 3) (list 4 5 6))",
         },
+        .{ "1", "(if true 1 2)" },
+        .{ "2", "(if false 1 2)" },
     };
 };
 

@@ -78,6 +78,7 @@ pub fn RefMap(comptime R: type, comptime T: type) type {
         /// stores deleted refs ready for reuse
         unused: std.ArrayListUnmanaged(R) = .{},
 
+        /// release all memory
         pub fn deinit(self: *Self, ally: Allocator) void {
             // deinit pages
             while (self.pages.popFirst()) |node| {

@@ -1,3 +1,5 @@
+const builtin = @import("builtin");
+const test_options = @import("test_options");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
@@ -178,7 +180,16 @@ const runtime = struct {
 
             // control flow
             .jump => {
-                try frame.jump(@intCast(consumed));
+                try frame.jump(consumed);
+            },
+            .branch => {
+                const cond = cond: {
+                    const ref = frame.pop();
+                    defer deacq(ref);
+                    break :cond get(ref).bool;
+                };
+
+                if (cond) try frame.jump(consumed);
             },
 
             // stack manipulation

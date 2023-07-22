@@ -41,6 +41,8 @@ pub const Object = union(enum) {
         list,
         concat,
 
+        @"if",
+
         // TODO eql, quote, unquote
 
         /// finds a builtin from its name
@@ -60,12 +62,7 @@ pub const Object = union(enum) {
                 .mod => "%",
                 .concat => "++",
 
-                inline .inspect,
-                .@"and",
-                .@"or",
-                .not,
-                .list,
-                => |tag| @tagName(tag),
+                inline .inspect, .@"and", .@"or", .not, .list, .@"if" => |tag| @tagName(tag),
             };
         }
     };
