@@ -15,13 +15,13 @@ pub const Frame = struct {
 
     func: *const Function,
     stack: Stack,
-    iter: Inst.Iterator,
+    iter: bc.Iterator,
 
     pub fn init(ally: Allocator, func: *const Function) Allocator.Error!Self {
         return Self{
             .func = func,
             .stack = try Stack.initCapacity(ally, func.stack_size),
-            .iter = Inst.iterator(func.code),
+            .iter = bc.iterator(func.code),
         };
     }
 
@@ -30,7 +30,7 @@ pub const Frame = struct {
     }
 
     /// use code iterator through this
-    pub fn nextInst(self: *Self, consumed: *u64) Inst.Iterator.Error!?Inst {
+    pub fn nextInst(self: *Self, consumed: *u64) bc.Iterator.Error!?Inst {
         return self.iter.next(consumed);
     }
 
@@ -86,7 +86,7 @@ pub const Frame = struct {
     }
 
     /// jump to an instruction address
-    pub fn jump(self: *Self, index: usize) Inst.Iterator.Error!void {
+    pub fn jump(self: *Self, index: usize) bc.Iterator.Error!void {
         try self.iter.jump(index);
     }
 };
@@ -125,7 +125,7 @@ const Thread = struct {
 
 // =============================================================================
 
-pub const Error = Allocator.Error || Inst.Iterator.Error;
+pub const Error = Allocator.Error || bc.Iterator.Error;
 
 fn execInst(
     frame_p: **Frame,

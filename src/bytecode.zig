@@ -120,81 +120,6 @@ pub const Inst = enum(u8) {
             inline else => |inst| @field(inst.meta(), @tagName(field)),
         };
     }
-
-    /// canonical way to read bytecode
-    pub fn iterator(code: []const u8) Iterator {
-        return Iterator.init(code);
-    }
-
-    pub const Iterator = struct {
-        pub const Error = error{
-            InvalidInst,
-            InvalidJump,
-            UnexpectedEndOfCode,
-        };
-
-        start: []const u8,
-        cur: []const u8,
-
-        fn init(code: []const u8) Iterator {
-            return Iterator{
-                .start = code,
-                .cur = code,
-            };
-        }
-
-        fn nextByte(iter: *Iterator) ?u8 {
-            if (iter.cur.len == 0) return null;
-
-            defer iter.cur = iter.cur[1..];
-            return iter.cur[0];
-        }
-
-        /// set state to an absolute index
-        pub fn jump(iter: *Iterator, index: usize) Error!void {
-            if (index > iter.start.len) {
-                return Error.InvalidJump;
-            }
-
-            iter.cur = iter.start[index..];
-        }
-
-        pub fn addr(iter: *const Iterator) usize {
-            return @intFromPtr(iter.cur.ptr) - @intFromPtr(iter.start.ptr);
-        }
-
-        /// iterates to next instruction, writing any consumed bytes to the
-        /// provided address
-        pub fn next(iter: *Iterator, consumed: *u64) Error!?Inst {
-            // get instruction
-            const inst_byte = iter.nextByte() orelse {
-                return null;
-            };
-
-            const inst = std.meta.intToEnum(Inst, inst_byte) catch {
-                return Error.InvalidInst;
-            };
-
-            // read any consumed bytes
-            const consume_bytes: usize = inst.getMeta(.consumes);
-
-            if (consume_bytes > 0) {
-                var n: usize = 0;
-                for (0..consume_bytes) |_| {
-                    const byte = iter.nextByte() orelse {
-                        return Error.UnexpectedEndOfCode;
-                    };
-                    n = (n << 8) | byte;
-                }
-
-                consumed.* = n;
-            } else {
-                consumed.* = undefined;
-            }
-
-            return inst;
-        }
-    };
 };
 
 pub const Function = struct {
@@ -386,5 +311,83 @@ pub const Builder = struct {
 
         // check boxes
         meta.nailed = true;
+    }
+};
+
+/// canonical iteration for bytecode
+pub fn iterator(code: []const u8) Iterator {
+    return Iterator.init(code);
+}
+
+/// flexible iterator for code
+pub const Iterator = struct {
+    const Self = @This();
+
+    pub const Error = error{
+        InvalidInst,
+        InvalidJump,
+        UnexpectedEndOfCode,
+    };
+
+    start: []const u8,
+    cur: []const u8,
+
+    fn init(code: []const u8) Self {
+        return Self{
+            .start = code,
+            .cur = code,
+        };
+    }
+
+    fn nextByte(self: *Self) ?u8 {
+        if (self.cur.len == 0) return null;
+
+        defer self.cur = self.cur[1..];
+        return self.cur[0];
+    }
+
+    /// set state to an absolute index
+    pub fn jump(self: *Self, index: usize) Error!void {
+        if (index > self.start.len) {
+            return Error.InvalidJump;
+        }
+
+        self.cur = self.start[index..];
+    }
+
+    pub fn addr(self: *const Self) usize {
+        return @intFromPtr(self.cur.ptr) - @intFromPtr(self.start.ptr);
+    }
+
+    /// iterates to next instruction, writing any consumed bytes to the
+    /// provided address
+    pub fn next(self: *Self, consumed: *u64) Error!?Inst {
+        // get instruction
+        const inst_byte = self.nextByte() orelse {
+            return null;
+        };
+
+        const inst = std.meta.intToEnum(Inst, inst_byte) catch {
+            return Error.InvalidInst;
+        };
+
+        // read any consumed bytes
+        const consume_bytes: usize = inst.getMeta(.consumes);
+
+        if (consume_bytes > 0) {
+            var n: usize = 0;
+            for (0..consume_bytes) |_| {
+                const byte = self.nextByte() orelse {
+                    return Error.UnexpectedEndOfCode;
+                };
+                n = (n << 8) | byte;
+            }
+
+            consumed.* = n;
+        } else {
+            consumed.* = undefined;
+        }
+
+        return inst;
     }
 };
