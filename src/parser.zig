@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const vm = @import("vm.zig");
+const gc = @import("gc.zig");
 const Tokenizer = @import("tokenizer.zig");
 const Token = Tokenizer.Token;
 const Object = @import("object.zig").Object;
@@ -124,7 +124,7 @@ fn parseString(ally: Allocator, unescaped_str: []const u8) Error![]const u8 {
 fn parseList(ctx: *Context) Error!Object.Ref {
     var list = std.ArrayList(Object.Ref).init(ctx.ally);
     defer {
-        vm.deacqAll(list.items);
+        gc.deacqAll(list.items);
         list.deinit();
     }
 
@@ -140,7 +140,7 @@ fn parseList(ctx: *Context) Error!Object.Ref {
         try list.append(try parseAtom(ctx));
     }
 
-    return try vm.new(.{ .list = list.items });
+    return try gc.new(.{ .list = list.items });
 }
 
 /// atom ::= ident | number | string | list
@@ -155,12 +155,12 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
             // appropriate to treat them as first-class syntax and live in
             // the parser (as opposed to being globally bound constants)
             if (std.mem.eql(u8, ident, "true")) {
-                break :t try vm.new(.{ .bool = true });
+                break :t try gc.new(.{ .bool = true });
             } else if (std.mem.eql(u8, ident, "false")) {
-                break :t try vm.new(.{ .bool = false });
+                break :t try gc.new(.{ .bool = false });
             }
 
-            break :t try vm.new(.{ .tag = ident });
+            break :t try gc.new(.{ .tag = ident });
         },
         .number => t: {
             ctx.accept();
@@ -169,7 +169,7 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
                 return Error.InvalidNumber;
             };
 
-            break :t try vm.new(.{ .int = num });
+            break :t try gc.new(.{ .int = num });
         },
         .string => t: {
             ctx.accept();
@@ -178,7 +178,7 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
             const parsed = try parseString(ctx.ally, slice);
             defer ctx.ally.free(parsed);
 
-            break :t try vm.new(.{ .string = parsed });
+            break :t try gc.new(.{ .string = parsed });
         },
         .lparen => try parseList(ctx),
         .rparen => Error.InvalidSyntax,

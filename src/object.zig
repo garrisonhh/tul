@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const vm = @import("vm.zig");
+const gc = @import("gc.zig");
 const formatObject = @import("formatters.zig").formatObject;
 
 /// canonical tul object
@@ -93,7 +93,7 @@ pub const Object = union(enum) {
             .bool, .int, .builtin => {},
             .string, .tag => |str| ally.free(str),
             .list => |refs| {
-                vm.deacqAll(refs);
+                gc.deacqAll(refs);
                 ally.free(refs);
             },
         }
@@ -112,7 +112,7 @@ pub const Object = union(enum) {
             // deep dupe (shallow dupe + acq everything)
             .list => |*refs| {
                 refs.* = try ally.dupe(Ref, refs.*);
-                vm.acqAll(refs.*);
+                gc.acqAll(refs.*);
             },
         }
 
@@ -121,8 +121,8 @@ pub const Object = union(enum) {
 
     /// deep structural equality for two refs
     pub fn eql(ref: Ref, other: Ref) bool {
-        const this = vm.get(ref);
-        const that = vm.get(other);
+        const this = gc.get(ref);
+        const that = gc.get(other);
 
         if (@as(Tag, this.*) != @as(Tag, that.*)) {
             return false;
@@ -194,7 +194,7 @@ pub const Object = union(enum) {
     /// hash any ref
     pub fn hash(hasher: *Hasher, ref: Ref) void {
         const b = std.mem.asBytes;
-        const obj = vm.get(ref);
+        const obj = gc.get(ref);
 
         hasher.update(b(&@as(Tag, obj.*)));
 
@@ -216,7 +216,7 @@ pub const Object = union(enum) {
         // TODO make main.init, main.deinit accessible from outside of main
         // for testing purposes? right now this could break if I add code to
         // those functions
-        defer vm.deinit();
+        defer gc.deinit();
 
         var map = HashMap(usize).init(std.testing.allocator);
         defer map.deinit();
@@ -233,12 +233,12 @@ pub const Object = union(enum) {
         // put objects in mem and into hashmap
         var refs: [inits.len]Ref = undefined;
         for (inits, 0..) |obj, i| {
-            const ref = try vm.new(obj);
+            const ref = try gc.new(obj);
 
             refs[i] = ref;
             try map.put(ref, i);
         }
-        defer vm.deacqAll(&refs);
+        defer gc.deacqAll(&refs);
 
         // check they are retrievable with the same ref
         for (refs, 0..) |ref, index| {
@@ -251,8 +251,8 @@ pub const Object = union(enum) {
 
         // attempt to retrieve each value using different refs
         for (inits, 0..) |obj, i| {
-            const t = try vm.new(obj);
-            defer vm.deacq(t);
+            const t = try gc.new(obj);
+            defer gc.deacq(t);
 
             const got = map.get(t) orelse {
                 return error.TestFailure;

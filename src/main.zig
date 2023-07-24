@@ -4,11 +4,11 @@ const std = @import("std");
 const stdout = std.io.getStdOut().writer();
 const stderr = std.io.getStdErr().writer();
 const com = @import("common");
-const vm = @import("vm.zig");
-const bc = @import("bytecode.zig");
-const Object = @import("object.zig").Object;
+const gc = @import("gc.zig");
 const parser = @import("parser.zig");
 const lower = @import("lower.zig");
+const vm = @import("vm.zig");
+const Object = @import("object.zig").Object;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const ally = gpa.allocator();
@@ -18,16 +18,16 @@ fn init() error{}!void {
 }
 
 fn deinit() void {
-    vm.deinit();
+    gc.deinit();
     _ = gpa.deinit();
 }
 
-const ExecError = parser.Error || lower.Error || vm.RuntimeError;
+const ExecError = parser.Error || lower.Error || vm.Error;
 
 /// one execution cycle
 fn exec(program: []const u8) ExecError!Object.Ref {
     const code = try parser.parse(ally, program);
-    defer vm.deacq(code);
+    defer gc.deacq(code);
     const func = try lower.lower(ally, code);
     defer func.deinit(ally);
 
@@ -49,9 +49,9 @@ pub fn main() !void {
     ;
 
     const out = try exec(code);
-    defer vm.deacq(out);
+    defer gc.deacq(out);
 
-    try stdout.print("{}\n", .{vm.get(out)});
+    try stdout.print("{}\n", .{gc.get(out)});
 }
 
 // testing =====================================================================
@@ -70,9 +70,9 @@ const TestCaseError =
 /// a test case; both inputs should match
 fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
     const exp = try exec(expected);
-    defer vm.deacq(exp);
+    defer gc.deacq(exp);
     const got = try exec(actual);
-    defer vm.deacq(got);
+    defer gc.deacq(got);
 
     // check for equality
     if (!Object.eql(exp, got)) {
@@ -88,7 +88,7 @@ fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
             \\{}
             \\
         ,
-            .{ actual, vm.get(got), expected, vm.get(exp) },
+            .{ actual, gc.get(got), expected, gc.get(exp) },
         );
 
         return TestCaseError.TestFailure;
@@ -101,7 +101,7 @@ fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
             \\
             \\
         ,
-            .{ actual, vm.get(got) },
+            .{ actual, gc.get(got) },
         );
     }
 }
@@ -127,9 +127,9 @@ fn runTestSet(set: []const tests.Test) TestCaseError!void {
             return e;
         };
 
-        if (vm.allocated() > 0) {
+        if (gc.allocated() > 0) {
             try stderr.print("unreleased memory after test:\n", .{});
-            vm.inspectMemory();
+            gc.inspectMemory();
 
             return TestCaseError.UnreleasedMemory;
         }

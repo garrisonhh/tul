@@ -1,7 +1,7 @@
 const std = @import("std");
 const fmt = std.fmt;
 const Object = @import("object.zig").Object;
-const vm = @import("vm.zig");
+const gc = @import("gc.zig");
 
 pub fn formatObject(
     obj: *const Object,
@@ -19,7 +19,7 @@ pub fn formatObject(
             try writer.writeAll("(");
             for (refs, 0..) |ref, i| {
                 if (i > 0) try writer.writeAll(" ");
-                try writer.print("{}", .{vm.get(ref)});
+                try writer.print("{}", .{gc.get(ref)});
             }
             try writer.writeAll(")");
         },

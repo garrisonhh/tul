@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const vm = @import("vm.zig");
+const gc = @import("gc.zig");
 const bc = @import("bytecode.zig");
 const Builder = bc.Builder;
 const Object = @import("object.zig").Object;
@@ -121,7 +121,7 @@ fn lowerApplication(
     }
 
     // function call
-    const applied = vm.get(refs[0]);
+    const applied = gc.get(refs[0]);
     const args = refs[1..];
 
     // builtins are a special case
@@ -140,8 +140,8 @@ fn lowerApplication(
 fn lowerValueIdent(bob: *Builder, ident: []const u8) Error!void {
     if (Object.Builtin.fromName(ident)) |b| {
         // builtins read as values evaluate to themselves
-        const ref = try vm.new(.{ .builtin = b });
-        defer vm.deacq(ref);
+        const ref = try gc.new(.{ .builtin = b });
+        defer gc.deacq(ref);
         try bob.loadConst(ref);
     } else {
         // read a var
@@ -155,7 +155,7 @@ fn lowerValues(bob: *Builder, refs: []const Object.Ref) Error!void {
 
 /// lower a ref being read as a value
 fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
-    switch (vm.get(ref).*) {
+    switch (gc.get(ref).*) {
         .bool, .int, .string, .builtin => try bob.loadConst(ref),
         .tag => |ident| try lowerValueIdent(bob, ident),
         .list => |refs| try lowerApplication(bob, ref, refs),

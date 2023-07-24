@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const vm = @import("vm.zig");
+const gc = @import("gc.zig");
 const Object = @import("object.zig").Object;
 const in_debug = @import("builtin").mode == .Debug;
 
@@ -14,15 +14,22 @@ pub const Inst = enum(u8) {
     const Meta = struct {
         const FieldTag = std.meta.FieldEnum(@This());
 
+        const Input = union(enum) {
+            /// takes some number of values
+            pops: comptime_int,
+            /// takes `consumed` values
+            consumed,
+        };
+
         /// number of refs popped
-        inputs: ?comptime_int,
+        inputs: Input,
         /// number of refs pushed
         outputs: comptime_int,
         /// number of extra bytes consumed in interpretation
         consumes: comptime_int,
 
         fn of(
-            comptime inputs: ?comptime_int,
+            comptime inputs: Input,
             comptime outputs: comptime_int,
             comptime consumes: comptime_int,
         ) Meta {
@@ -71,21 +78,27 @@ pub const Inst = enum(u8) {
     fn meta(comptime self: Self) Meta {
         comptime {
             const m = Meta.of;
+            const pops = struct {
+                fn f(comptime n: comptime_int) Meta.Input {
+                    return .{ .pops = n };
+                }
+            }.f;
+
             return switch (self) {
-                .nop => m(0, 0, 0),
-                .load_const => m(0, 1, 4),
-                .jump => m(0, 0, address_bytes),
-                .branch => m(1, 0, address_bytes),
-                .swap => m(2, 2, 0),
-                .dup => m(1, 2, 0),
-                .over => m(2, 3, 0),
-                .rot => m(3, 3, 0),
-                .drop => m(1, 0, 0),
-                .list => m(null, 1, 4),
+                .nop => m(pops(0), 0, 0),
+                .load_const => m(pops(0), 1, 4),
+                .jump => m(pops(0), 0, address_bytes),
+                .branch => m(pops(1), 0, address_bytes),
+                .swap => m(pops(2), 2, 0),
+                .dup => m(pops(1), 2, 0),
+                .over => m(pops(2), 3, 0),
+                .rot => m(pops(3), 3, 0),
+                .drop => m(pops(1), 0, 0),
+                .list => m(.consumed, 1, 4),
 
                 .inspect,
                 .lnot,
-                => m(1, 1, 0),
+                => m(pops(1), 1, 0),
 
                 .add,
                 .sub,
@@ -96,7 +109,7 @@ pub const Inst = enum(u8) {
                 .lor,
                 .eq,
                 .concat,
-                => m(2, 1, 0),
+                => m(pops(2), 1, 0),
             };
         }
     }
@@ -138,7 +151,7 @@ pub const Inst = enum(u8) {
         }
 
         /// set state to an absolute index
-        fn jump(iter: *Iterator, index: usize) Error!void {
+        pub fn jump(iter: *Iterator, index: usize) Error!void {
             if (index > iter.start.len) {
                 return Error.InvalidJump;
             }
@@ -188,6 +201,7 @@ pub const Function = struct {
     const Self = @This();
 
     /// gc tracked values
+    /// TODO store these more globally, intern them with Object.HashMap
     consts: []const Object.Ref,
     /// bytecode
     code: []const u8,
@@ -195,7 +209,7 @@ pub const Function = struct {
     stack_size: usize,
 
     pub fn deinit(self: Self, ally: Allocator) void {
-        vm.deacqAll(self.consts);
+        gc.deacqAll(self.consts);
         ally.free(self.consts);
         ally.free(self.code);
     }
@@ -226,7 +240,7 @@ pub const Function = struct {
 
             if (inst == .load_const) {
                 const ref = self.consts[consumed];
-                try writer.print("{}", .{vm.get(ref)});
+                try writer.print("{}", .{gc.get(ref)});
             } else if (inst.getMeta(.consumes) > 0) {
                 try writer.print("{d}", .{consumed});
             }
@@ -261,7 +275,7 @@ pub const Builder = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        vm.deacqAll(self.consts.items);
+        gc.deacqAll(self.consts.items);
         self.consts.deinit(self.ally);
         self.code.deinit(self.ally);
         self.backrefs.deinit(self.ally);
@@ -301,7 +315,7 @@ pub const Builder = struct {
 
     /// stores and acqs a ref to the builder, returns const index
     fn addConst(self: *Self, ref: Object.Ref) Allocator.Error!u32 {
-        vm.acq(ref);
+        gc.acq(ref);
         const index: u32 = @intCast(self.consts.items.len);
         try self.consts.append(self.ally, ref);
         return index;
@@ -372,88 +386,5 @@ pub const Builder = struct {
 
         // check boxes
         meta.nailed = true;
-    }
-};
-
-/// context for function execution
-pub const Frame = struct {
-    const Self = @This();
-    const Stack = std.ArrayListUnmanaged(Object.Ref);
-
-    func: *const Function,
-    stack: Stack,
-    iter: Inst.Iterator,
-
-    pub fn init(ally: Allocator, func: *const Function) Allocator.Error!Self {
-        return Self{
-            .func = func,
-            .stack = try Stack.initCapacity(ally, func.stack_size),
-            .iter = Inst.iterator(func.code),
-        };
-    }
-
-    pub fn deinit(self: *Self, ally: Allocator) void {
-        self.stack.deinit(ally);
-    }
-
-    /// use code iterator through this
-    pub fn nextInst(self: *Self, consumed: *u64) Inst.Iterator.Error!?Inst {
-        return self.iter.next(consumed);
-    }
-
-    pub fn push(self: *Self, ref: Object.Ref) void {
-        self.stack.appendAssumeCapacity(ref);
-    }
-
-    pub fn pushAll(self: *Self, refs: []const Object.Ref) void {
-        for (refs) |ref| self.push(ref);
-    }
-
-    fn assertStack(self: Self, num_items: usize) void {
-        if (in_debug and self.stack.items.len < num_items) {
-            @panic("stack frame underflow :(");
-        }
-    }
-
-    pub fn pop(self: *Self) Object.Ref {
-        self.assertStack(1);
-        return self.stack.pop();
-    }
-
-    pub fn popArray(self: *Self, comptime N: comptime_int) [N]Object.Ref {
-        const arr = self.peekArray(N);
-        self.stack.shrinkRetainingCapacity(self.stack.items.len - N);
-        return arr;
-    }
-
-    pub fn popSliceAlloc(
-        self: *Self,
-        ally: Allocator,
-        len: usize,
-    ) Allocator.Error![]const Object.Ref {
-        self.assertStack(len);
-
-        const index = self.stack.items.len - len;
-        defer self.stack.shrinkRetainingCapacity(index);
-
-        const slice = self.stack.items[index..];
-        return try ally.dupe(Object.Ref, slice);
-    }
-
-    pub fn peek(self: Self) Object.Ref {
-        self.assertStack(1);
-        return self.stack.getLast();
-    }
-
-    pub fn peekArray(self: Self, comptime N: comptime_int) [N]Object.Ref {
-        self.assertStack(N);
-        var arr: [N]Object.Ref = undefined;
-        @memcpy(&arr, self.stack.items[self.stack.items.len - N ..]);
-        return arr;
-    }
-
-    /// jump to an instruction address
-    pub fn jump(self: *Self, index: usize) Inst.Iterator.Error!void {
-        try self.iter.jump(index);
     }
 };
