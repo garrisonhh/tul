@@ -99,6 +99,7 @@ pub const Object = union(enum) {
         }
     }
 
+    /// deepcopy
     pub fn clone(self: *const Self, ally: Allocator) Allocator.Error!Self {
         var obj = self.*;
         switch (obj) {
@@ -158,5 +159,106 @@ pub const Object = union(enum) {
                 break :deep true;
             },
         };
+    }
+
+    /// type for hashing objects
+    pub const Hasher = std.hash.Wyhash;
+    /// type for holding a hash
+    pub const Hash = @typeInfo(@TypeOf(Hasher.hash)).Fn.return_type.?;
+
+    const HashMapContext = struct {
+        const seed = 0xBEEF_FA75;
+
+        pub fn hash(_: HashMapContext, key: Ref) Hash {
+            var hasher = Hasher.init(seed);
+            Object.hash(&hasher, key);
+            return hasher.final();
+        }
+
+        pub fn eql(_: HashMapContext, a: Ref, b: Ref) bool {
+            return Object.eql(a, b);
+        }
+    };
+
+    /// a zig stdlib hashmap which can use refs as keys
+    pub fn HashMapUnmanaged(comptime T: type) type {
+        const load_percentage = std.hash_map.default_max_load_percentage;
+        return std.HashMapUnmanaged(Ref, T, HashMapContext, load_percentage);
+    }
+
+    /// a zig stdlib hashmap which can use refs as keys
+    pub fn HashMap(comptime T: type) type {
+        return HashMapUnmanaged(T).Managed;
+    }
+
+    /// hash any ref
+    pub fn hash(hasher: *Hasher, ref: Ref) void {
+        const b = std.mem.asBytes;
+        const obj = vm.get(ref);
+
+        hasher.update(b(&@as(Tag, obj.*)));
+
+        switch (obj.*) {
+            // convert to bytes and hash
+            inline .bool, .int, .builtin => |v| hasher.update(b(&v)),
+            // hash bytes directly
+            .string, .tag => |s| hasher.update(s),
+            // recurse
+            .list => |children| {
+                for (children) |child| {
+                    hash(hasher, child);
+                }
+            },
+        }
+    }
+
+    test "hashmap" {
+        // TODO make main.init, main.deinit accessible from outside of main
+        // for testing purposes? right now this could break if I add code to
+        // those functions
+        defer vm.deinit();
+
+        var map = HashMap(usize).init(std.testing.allocator);
+        defer map.deinit();
+
+        const inits = [_]Self{
+            .{ .bool = true },
+            .{ .bool = false },
+            .{ .int = 0 },
+            .{ .int = -1 },
+            .{ .int = std.math.maxInt(i64) },
+            .{ .string = "hello, world!" },
+        };
+
+        // put objects in mem and into hashmap
+        var refs: [inits.len]Ref = undefined;
+        for (inits, 0..) |obj, i| {
+            const ref = try vm.new(obj);
+
+            refs[i] = ref;
+            try map.put(ref, i);
+        }
+        defer vm.deacqAll(&refs);
+
+        // check they are retrievable with the same ref
+        for (refs, 0..) |ref, index| {
+            const got = map.get(ref) orelse {
+                return error.TestFailure;
+            };
+
+            try std.testing.expectEqual(index, got);
+        }
+
+        // attempt to retrieve each value using different refs
+        for (inits, 0..) |obj, i| {
+            const t = try vm.new(obj);
+            defer vm.deacq(t);
+
+            const got = map.get(t) orelse {
+                return error.TestFailure;
+            };
+
+            try std.testing.expectEqual(i, got);
+        }
     }
 };

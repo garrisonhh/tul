@@ -56,6 +56,12 @@ pub fn main() !void {
 
 // testing =====================================================================
 
+comptime {
+    if (builtin.is_test) {
+        std.testing.refAllDeclsRecursive(@This());
+    }
+}
+
 const TestCaseError =
     ExecError ||
     @TypeOf(stderr).Error ||

@@ -19,6 +19,12 @@ pub fn deinit() void {
     mem.deinit(ally);
 
     _ = gpa.deinit();
+
+    // in testing, vm may be reinitialized
+    if (builtin.is_test) {
+        mem = .{};
+        gpa = .{};
+    }
 }
 
 /// displays memory to stderr for debugging purposes
@@ -66,7 +72,7 @@ fn ReturnType(comptime func: anytype) type {
 ///
 /// get output with '.f' since returning parametrized function types isn't
 /// currently supported afaik
-fn arrayify(comptime func: anytype) type {
+fn arrayify_lower(comptime func: anytype) type {
     return struct {
         fn f(
             comptime N: comptime_int,
@@ -89,6 +95,10 @@ fn arrayify(comptime func: anytype) type {
             }
         }
     };
+}
+
+fn arrayify(comptime func: anytype) @TypeOf(arrayify_lower(func).f) {
+    return arrayify_lower(func).f;
 }
 
 /// turn `fn(Object.Ref) void` into a version that operates on a slice
@@ -132,7 +142,7 @@ pub const acqAll = sliceify(acq);
 /// see deacq
 pub const deacqAll = sliceify(deacq);
 /// see get
-pub const getArray = arrayify(get).f;
+pub const getArray = arrayify(get);
 
 /// code execution
 const runtime = struct {
