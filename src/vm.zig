@@ -86,8 +86,8 @@ pub const Frame = struct {
     }
 
     /// jump to an instruction address
-    pub fn jump(self: *Self, index: usize) bc.Iterator.Error!void {
-        try self.iter.jump(index);
+    pub fn jump(self: *Self, index: usize) void {
+        self.iter.jump(index);
     }
 };
 
@@ -151,7 +151,7 @@ fn execInst(
 
         // control flow
         .jump => {
-            try frame.jump(consumed);
+            frame.jump(consumed);
         },
         .branch => {
             const cond = cond: {
@@ -160,7 +160,7 @@ fn execInst(
                 break :cond gc.get(ref).bool;
             };
 
-            if (cond) try frame.jump(consumed);
+            if (cond) frame.jump(consumed);
         },
 
         // stack manipulation

@@ -5,11 +5,12 @@ const gc = @import("gc.zig");
 const Object = @import("object.zig").Object;
 const in_debug = @import("builtin").mode == .Debug;
 
+/// type for storing branch addresses
+pub const AddressInt = u32;
+
 /// an atomic stack instruction
 pub const Inst = enum(u8) {
     const Self = @This();
-
-    const address_bytes = 4;
 
     const Meta = struct {
         const FieldTag = std.meta.FieldEnum(@This());
@@ -26,7 +27,7 @@ pub const Inst = enum(u8) {
         /// number of refs pushed
         outputs: usize,
         /// number of extra bytes consumed in interpretation
-        consumes: comptime_int,
+        consumes: usize,
 
         fn of(inputs: Input, outputs: usize, consumes: usize) Meta {
             return .{
@@ -82,8 +83,8 @@ pub const Inst = enum(u8) {
         return switch (self) {
             .nop => m(pops(0), 0, 0),
             .load_const => m(pops(0), 1, 4),
-            .jump => m(pops(0), 0, address_bytes),
-            .branch => m(pops(1), 0, address_bytes),
+            .jump => m(pops(0), 0, @sizeOf(AddressInt)),
+            .branch => m(pops(1), 0, @sizeOf(AddressInt)),
             .swap => m(pops(2), 2, 0),
             .dup => m(pops(1), 2, 0),
             .over => m(pops(2), 3, 0),
@@ -141,11 +142,11 @@ pub const Function = struct {
     pub fn display(
         self: Self,
         writer: anytype,
-    ) (Inst.Iterator.Error || @TypeOf(writer).Error)!void {
-        var insts = Inst.iterator(self.code);
+    ) (Iterator.Error || @TypeOf(writer).Error)!void {
+        var insts = iterator(self.code);
         var consumed: u64 = undefined;
         while (true) {
-            const addr = insts.addr();
+            const addr = insts.index;
             const inst = try insts.next(&consumed) orelse break;
 
             try writer.print("{d:>4} {s} ", .{ addr, @tagName(inst) });
@@ -256,7 +257,7 @@ pub const Builder = struct {
         c: Consumed(inst),
     ) Allocator.Error!void {
         try self.addInst(inst);
-        const consumed = com.bytes.bytesFromInt(Consumed(inst), c, .Big);
+        const consumed = com.bytes.bytesFromInt(Consumed(inst), c);
         try self.code.appendSlice(self.ally, &consumed);
     }
 
@@ -272,7 +273,7 @@ pub const Builder = struct {
         // add inst with dummy value
         try self.addInst(inst);
         const index = self.code.items.len;
-        try self.code.appendNTimes(self.ally, 0, Inst.address_bytes);
+        try self.code.appendNTimes(self.ally, undefined, @sizeOf(AddressInt));
 
         return try self.backrefs.put(self.ally, .{
             .index = index,
@@ -287,13 +288,12 @@ pub const Builder = struct {
 
         // get consumed int slice
         const start = meta.index;
-        const stop = meta.index + Inst.address_bytes;
+        const stop = meta.index + @sizeOf(AddressInt);
         const slice = self.code.items[start..stop];
 
         // get slice for address
-        const addr: u32 = @intCast(self.code.items.len);
-        const bytes = com.bytes.bytesFromInt(u32, addr, .Big);
-
+        const addr: AddressInt = @intCast(self.code.items.len);
+        const bytes = com.bytes.bytesFromInt(AddressInt, addr);
         @memcpy(slice, &bytes);
 
         // check boxes
@@ -307,38 +307,25 @@ pub const Iterator = struct {
 
     pub const Error = error{
         InvalidInst,
-        InvalidJump,
         UnexpectedEndOfCode,
     };
 
-    start: []const u8,
-    cur: []const u8,
-
-    fn init(code: []const u8) Self {
-        return Self{
-            .start = code,
-            .cur = code,
-        };
-    }
+    code: []const u8,
+    index: usize = 0,
 
     fn nextByte(self: *Self) ?u8 {
-        if (self.cur.len == 0) return null;
+        if (self.index == self.code.len) {
+            return null;
+        }
 
-        defer self.cur = self.cur[1..];
-        return self.cur[0];
+        defer self.index += 1;
+        return self.code[self.index];
     }
 
     /// set state to an absolute index
-    pub fn jump(self: *Self, index: usize) Error!void {
-        if (index > self.start.len) {
-            return Error.InvalidJump;
-        }
-
-        self.cur = self.start[index..];
-    }
-
-    pub fn addr(self: *const Self) usize {
-        return @intFromPtr(self.cur.ptr) - @intFromPtr(self.start.ptr);
+    pub fn jump(self: *Self, index: usize) void {
+        std.debug.assert(index <= self.code.len);
+        self.index = index;
     }
 
     /// iterates to next instruction, writing any consumed bytes to the
@@ -354,18 +341,15 @@ pub const Iterator = struct {
         };
 
         // read any consumed bytes
-        const consume_bytes: usize = inst.meta().consumes;
-
-        if (consume_bytes > 0) {
-            var n: usize = 0;
-            for (0..consume_bytes) |_| {
-                const byte = self.nextByte() orelse {
-                    return Error.UnexpectedEndOfCode;
-                };
-                n = (n << 8) | byte;
+        const eat = inst.meta().consumes;
+        if (eat > 0) {
+            if (self.index + eat > self.code.len) {
+                return Error.InvalidInst;
             }
 
-            consumed.* = n;
+            const chomp = self.code[self.index .. self.index + eat];
+            self.index += eat;
+            consumed.* = com.bytes.intFromBytes(u64, chomp);
         } else {
             consumed.* = undefined;
         }
@@ -376,5 +360,5 @@ pub const Iterator = struct {
 
 /// canonical iteration for bytecode
 pub fn iterator(code: []const u8) Iterator {
-    return Iterator.init(code);
+    return .{ .code = code };
 }
