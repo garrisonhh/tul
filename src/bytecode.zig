@@ -12,27 +12,7 @@ pub const Inst = enum(u8) {
     const address_bytes = 4;
 
     const Meta = struct {
-        /// tag of the meta type fields
-        const FieldTag = t: {
-            const fields = @typeInfo(Meta).Struct.fields;
-            var tag_fields: [fields.len]std.builtin.Type.EnumField = undefined;
-
-            for (fields, &tag_fields, 0..) |st_field, *e_field, i| {
-                e_field.* = .{
-                    .name = st_field.name,
-                    .value = i,
-                };
-            }
-
-            break :t @Type(.{
-                .Enum = .{
-                    .tag_type = u8,
-                    .fields = &tag_fields,
-                    .decls = &.{},
-                    .is_exhaustive = true,
-                },
-            });
-        };
+        const FieldTag = std.meta.FieldEnum(@This());
 
         /// number of refs popped
         inputs: ?comptime_int,
