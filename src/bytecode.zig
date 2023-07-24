@@ -16,7 +16,7 @@ pub const Inst = enum(u8) {
 
         const Input = union(enum) {
             /// takes some number of values
-            pops: comptime_int,
+            pops: usize,
             /// takes `consumed` values
             consumed,
         };
@@ -24,15 +24,11 @@ pub const Inst = enum(u8) {
         /// number of refs popped
         inputs: Input,
         /// number of refs pushed
-        outputs: comptime_int,
+        outputs: usize,
         /// number of extra bytes consumed in interpretation
         consumes: comptime_int,
 
-        fn of(
-            comptime inputs: Input,
-            comptime outputs: comptime_int,
-            comptime consumes: comptime_int,
-        ) Meta {
+        fn of(inputs: Input, outputs: usize, consumes: usize) Meta {
             return .{
                 .inputs = inputs,
                 .outputs = outputs,
@@ -74,50 +70,41 @@ pub const Inst = enum(u8) {
     concat,
     list,
 
-    /// comptime mapping of inst -> metadata
-    fn meta(comptime self: Self) Meta {
-        comptime {
-            const m = Meta.of;
-            const pops = struct {
-                fn f(comptime n: comptime_int) Meta.Input {
-                    return .{ .pops = n };
-                }
-            }.f;
+    /// get metadata for how this instruction is parsed and affects the stack
+    pub fn meta(self: Self) Meta {
+        const m = Meta.of;
+        const pops = struct {
+            fn f(comptime n: comptime_int) Meta.Input {
+                return .{ .pops = n };
+            }
+        }.f;
 
-            return switch (self) {
-                .nop => m(pops(0), 0, 0),
-                .load_const => m(pops(0), 1, 4),
-                .jump => m(pops(0), 0, address_bytes),
-                .branch => m(pops(1), 0, address_bytes),
-                .swap => m(pops(2), 2, 0),
-                .dup => m(pops(1), 2, 0),
-                .over => m(pops(2), 3, 0),
-                .rot => m(pops(3), 3, 0),
-                .drop => m(pops(1), 0, 0),
-                .list => m(.consumed, 1, 4),
-
-                .inspect,
-                .lnot,
-                => m(pops(1), 1, 0),
-
-                .add,
-                .sub,
-                .mul,
-                .div,
-                .mod,
-                .land,
-                .lor,
-                .eq,
-                .concat,
-                => m(pops(2), 1, 0),
-            };
-        }
-    }
-
-    /// get metadata about this instruction
-    pub fn getMeta(self: Self, comptime field: Meta.FieldTag) usize {
         return switch (self) {
-            inline else => |inst| @field(inst.meta(), @tagName(field)),
+            .nop => m(pops(0), 0, 0),
+            .load_const => m(pops(0), 1, 4),
+            .jump => m(pops(0), 0, address_bytes),
+            .branch => m(pops(1), 0, address_bytes),
+            .swap => m(pops(2), 2, 0),
+            .dup => m(pops(1), 2, 0),
+            .over => m(pops(2), 3, 0),
+            .rot => m(pops(3), 3, 0),
+            .drop => m(pops(1), 0, 0),
+            .list => m(.consumed, 1, 4),
+
+            .inspect,
+            .lnot,
+            => m(pops(1), 1, 0),
+
+            .add,
+            .sub,
+            .mul,
+            .div,
+            .mod,
+            .land,
+            .lor,
+            .eq,
+            .concat,
+            => m(pops(2), 1, 0),
         };
     }
 };
@@ -166,7 +153,7 @@ pub const Function = struct {
             if (inst == .load_const) {
                 const ref = self.consts[consumed];
                 try writer.print("{}", .{gc.get(ref)});
-            } else if (inst.getMeta(.consumes) > 0) {
+            } else if (inst.meta().consumes > 0) {
                 try writer.print("{d}", .{consumed});
             }
 
@@ -258,7 +245,7 @@ pub const Builder = struct {
     }
 
     fn Consumed(comptime inst: Inst) type {
-        return std.meta.Int(.unsigned, 8 * inst.getMeta(.consumes));
+        return std.meta.Int(.unsigned, 8 * inst.meta().consumes);
     }
 
     /// add an instruction with consumed data. for instructions with no data,
@@ -314,11 +301,6 @@ pub const Builder = struct {
     }
 };
 
-/// canonical iteration for bytecode
-pub fn iterator(code: []const u8) Iterator {
-    return Iterator.init(code);
-}
-
 /// flexible iterator for code
 pub const Iterator = struct {
     const Self = @This();
@@ -372,7 +354,7 @@ pub const Iterator = struct {
         };
 
         // read any consumed bytes
-        const consume_bytes: usize = inst.getMeta(.consumes);
+        const consume_bytes: usize = inst.meta().consumes;
 
         if (consume_bytes > 0) {
             var n: usize = 0;
@@ -391,3 +373,8 @@ pub const Iterator = struct {
         return inst;
     }
 };
+
+/// canonical iteration for bytecode
+pub fn iterator(code: []const u8) Iterator {
+    return Iterator.init(code);
+}
