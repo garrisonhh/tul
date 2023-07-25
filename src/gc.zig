@@ -127,6 +127,11 @@ pub fn deacq(ref: Object.Ref) void {
 
 /// read from an object thru its ref & rc
 pub fn get(ref: Object.Ref) *const Object {
+    return getMut(ref);
+}
+
+/// get mutable object pointer (use with caution)
+pub fn getMut(ref: Object.Ref) *Object {
     return &mem.get(ref).obj;
 }
 

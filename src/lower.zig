@@ -11,6 +11,7 @@ const LowerError = error{
     // TODO eradicate these
     TodoVars,
     TodoApplied,
+    TodoLowerMap,
 };
 
 pub const Error = Allocator.Error || LowerError;
@@ -34,6 +35,7 @@ const BuiltinMeta = union(enum) {
     reduction: Reduction,
 
     list,
+    map,
     @"if",
 };
 
@@ -60,6 +62,7 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
         .not => mk.pure(.lnot, 1),
         .eq => mk.pure(.eq, 2),
         .list => .list,
+        .map => .map,
         .concat => mk.reduction(.concat, 2),
         .@"if" => .@"if",
     };
@@ -89,6 +92,19 @@ fn lowerAppliedBuiltin(
             try lowerValues(bob, args);
             // TODO in future zig, this explicit `@as` should be unnecessary
             try bob.addInstC(.list, @as(u32, @intCast(args.len)));
+        },
+        .map => {
+            if (args.len % 2 != 0) return LowerError.BadArity;
+
+            const empty_map = try gc.put(.{ .map = .{ .parent = null } });
+            try bob.loadConst(empty_map);
+
+            var i: usize = 0;
+            while (i < args.len) : (i += 2) {
+                try lowerValue(bob, args[i]);
+                try lowerValue(bob, args[i + 1]);
+                try bob.addInst(.put);
+            }
         },
         .@"if" => {
             if (args.len != 3) return LowerError.BadArity;
@@ -159,6 +175,7 @@ fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
         .bool, .int, .string, .builtin => try bob.loadConst(ref),
         .tag => |ident| try lowerValueIdent(bob, ident),
         .list => |refs| try lowerApplication(bob, ref, refs),
+        .map => return Error.TodoLowerMap,
     }
 }
 

@@ -41,11 +41,12 @@ pub const Object = union(enum) {
         eq,
 
         list,
+        map,
         concat,
 
         @"if",
 
-        // TODO eql, quote, unquote
+        // TODO quote, unquote
 
         /// finds a builtin from its name
         pub fn fromName(s: []const u8) ?Builtin {
@@ -70,9 +71,75 @@ pub const Object = union(enum) {
                 .@"or",
                 .not,
                 .list,
+                .map,
                 .@"if",
                 => |tag| @tagName(tag),
             };
+        }
+    };
+
+    /// tul's dictionary implementation
+    pub const Map = struct {
+        map: HashMapUnmanaged(Ref) = .{},
+        parent: ?Ref,
+        children: HashMapUnmanaged(void) = .{},
+
+        /// returns a ref to the map with the k/v pair added
+        pub fn put(
+            ally: Allocator,
+            ref: Ref,
+            key: Ref,
+            value: Ref,
+        ) Allocator.Error!Ref {
+            std.debug.assert(gc.get(ref).* == .map);
+
+            const map = &gc.getMut(ref).map;
+            const count = gc.refCount(ref);
+            const is_parent = map.children.count() > 0;
+
+            if (count == 1 and !is_parent) {
+                // can mutate this map safely
+                const res = try map.map.getOrPut(ally, key);
+                if (!res.found_existing) {
+                    gc.acq(key);
+                } else {
+                    gc.deacq(res.value_ptr.*);
+                }
+
+                gc.acq(value);
+                res.value_ptr.* = value;
+
+                return ref;
+            }
+
+            // fork a child
+            const parent: ?Ref = if (map.map.count() == 0) null else ref;
+            const child = try gc.put(.{ .map = .{ .parent = parent } });
+            gc.acq(ref);
+
+            // place kv in map
+            gc.acq(key);
+            gc.acq(value);
+            try gc.getMut(child).map.map.put(ally, key, value);
+
+            return child;
+        }
+
+        /// returns a ref to the output, which can be either a value or unit
+        pub fn get(ref: Ref, key: Ref) Allocator.Error!Ref {
+            std.debug.assert(gc.get(ref).* == .map);
+
+            const map = gc.get(ref).map;
+            if (map.map.get(key)) |value| {
+                // this map contains the key
+                return value;
+            } else if (map.parent) |parent| {
+                // parent might contain the key
+                return try get(parent, key);
+            }
+
+            // no entry found
+            return try gc.new(.{ .list = &.{} });
         }
     };
 
@@ -85,16 +152,37 @@ pub const Object = union(enum) {
     tag: []const u8,
     /// owned array of acq'd refs
     list: []const Ref,
+    /// owns all keys and values stored
+    map: Map,
 
     pub const format = formatObject;
 
-    pub fn deinit(self: Self, ally: Allocator) void {
-        switch (self) {
+    pub fn deinit(self: *Self, ally: Allocator) void {
+        switch (self.*) {
             .bool, .int, .builtin => {},
             .string, .tag => |str| ally.free(str),
             .list => |refs| {
                 gc.deacqAll(refs);
                 ally.free(refs);
+            },
+            .map => |*map| {
+                // hashmap
+                var entries = map.map.iterator();
+                while (entries.next()) |entry| {
+                    gc.deacq(entry.key_ptr.*);
+                    gc.deacq(entry.value_ptr.*);
+                }
+
+                map.map.deinit(ally);
+
+                // children hashset
+                var children = map.children.keyIterator();
+                while (children.next()) |child| gc.deacq(child.*);
+
+                map.children.deinit(ally);
+
+                // parent
+                if (map.parent) |parent| gc.deacq(parent);
             },
         }
     }
@@ -114,6 +202,8 @@ pub const Object = union(enum) {
                 refs.* = try ally.dupe(Ref, refs.*);
                 gc.acqAll(refs.*);
             },
+            // cloning maps doesn't make sense
+            .map => @panic("attempted to clone a map"),
         }
 
         return obj;
@@ -157,6 +247,9 @@ pub const Object = union(enum) {
                 }
 
                 break :deep true;
+            },
+            .map => {
+                @panic("TODO Object.eql for maps");
             },
         };
     }
@@ -209,56 +302,69 @@ pub const Object = union(enum) {
                     hash(hasher, child);
                 }
             },
-        }
-    }
+            .map => |map| {
+                var iter = map.map.iterator();
+                while (iter.next()) |entry| {
+                    hash(hasher, entry.key_ptr.*);
+                    hash(hasher, entry.value_ptr.*);
+                }
 
-    test "hashmap" {
-        // TODO make main.init, main.deinit accessible from outside of main
-        // for testing purposes? right now this could break if I add code to
-        // those functions
-        defer gc.deinit();
-
-        var map = HashMap(usize).init(std.testing.allocator);
-        defer map.deinit();
-
-        const inits = [_]Self{
-            .{ .bool = true },
-            .{ .bool = false },
-            .{ .int = 0 },
-            .{ .int = -1 },
-            .{ .int = std.math.maxInt(i64) },
-            .{ .string = "hello, world!" },
-        };
-
-        // put objects in mem and into hashmap
-        var refs: [inits.len]Ref = undefined;
-        for (inits, 0..) |obj, i| {
-            const ref = try gc.new(obj);
-
-            refs[i] = ref;
-            try map.put(ref, i);
-        }
-        defer gc.deacqAll(&refs);
-
-        // check they are retrievable with the same ref
-        for (refs, 0..) |ref, index| {
-            const got = map.get(ref) orelse {
-                return error.TestFailure;
-            };
-
-            try std.testing.expectEqual(index, got);
-        }
-
-        // attempt to retrieve each value using different refs
-        for (inits, 0..) |obj, i| {
-            const t = try gc.new(obj);
-            defer gc.deacq(t);
-
-            const got = map.get(t) orelse {
-                return error.TestFailure;
-            };
-
-            try std.testing.expectEqual(i, got);
+                if (map.parent) |parent| {
+                    hash(hasher, parent);
+                }
+            },
         }
     }
 };
+
+// tests =======================================================================
+
+test "hashmap" {
+    // TODO make main.init, main.deinit accessible from outside of main
+    // for testing purposes? right now this could break if I add code to
+    // those functions
+    defer gc.deinit();
+
+    var map = Object.HashMap(usize).init(std.testing.allocator);
+    defer map.deinit();
+
+    const inits = [_]Object{
+        .{ .bool = true },
+        .{ .bool = false },
+        .{ .int = 0 },
+        .{ .int = -1 },
+        .{ .int = std.math.maxInt(i64) },
+        .{ .string = "hello, world!" },
+    };
+
+    // put objects in mem and into hashmap
+    var refs: [inits.len]Object.Ref = undefined;
+    for (inits, 0..) |obj, i| {
+        const ref = try gc.new(obj);
+
+        refs[i] = ref;
+        try map.put(ref, i);
+    }
+    defer gc.deacqAll(&refs);
+
+    // check they are retrievable with the same ref
+    for (refs, 0..) |ref, index| {
+        const got = map.get(ref) orelse {
+            return error.TestFailure;
+        };
+
+        try std.testing.expectEqual(index, got);
+    }
+
+    // attempt to retrieve each value using different refs
+    for (inits, 0..) |obj, i| {
+        const t = try gc.new(obj);
+        defer gc.deacq(t);
+
+        const got = map.get(t) orelse {
+            return error.TestFailure;
+        };
+
+        try std.testing.expectEqual(i, got);
+    }
+}

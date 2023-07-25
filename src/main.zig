@@ -44,7 +44,7 @@ pub fn main() !void {
     defer deinit();
 
     const code =
-        \\(if false 1 2)
+        \\(map 1 2 3 4)
         \\
     ;
 
@@ -209,6 +209,8 @@ const tests = struct {
         },
         .{ "1", "(if true 1 2)" },
         .{ "2", "(if false 1 2)" },
+        .{ "(map)", "(map)" },
+        .{ "(map 1 2)", "(map 1 2)" },
     };
 };
 

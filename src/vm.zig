@@ -283,6 +283,16 @@ fn execInst(
             const list = try frame.popSliceAlloc(gc.ally, consumed);
             frame.push(try gc.put(.{ .list = list }));
         },
+        .put => {
+            const refs = frame.popArray(3);
+            const map = refs[0];
+            const key = refs[1];
+            const value = refs[2];
+            // map acq/deacq is handled by Object.Map behavior
+            defer gc.deacqAll(refs[1..]);
+
+            frame.push(try Object.Map.put(gc.ally, map, key, value));
+        },
     }
 }
 

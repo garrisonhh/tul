@@ -23,5 +23,24 @@ pub fn formatObject(
             }
             try writer.writeAll(")");
         },
+        .map => |map| {
+            try writer.writeAll("{");
+
+            var entries = map.map.iterator();
+            var i: usize = 0;
+            while (entries.next()) |entry| : (i += 1) {
+                if (i > 0) try writer.writeAll(", ");
+                try writer.print("{} : {}", .{
+                    gc.get(entry.key_ptr.*),
+                    gc.get(entry.value_ptr.*),
+                });
+            }
+
+            if (map.parent) |parent| {
+                try writer.print(" <parent>{} ", .{gc.get(parent)});
+            }
+
+            try writer.writeAll("}");
+        },
     }
 }
