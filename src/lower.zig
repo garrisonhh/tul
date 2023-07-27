@@ -64,6 +64,8 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
         .list => .list,
         .map => .map,
         .concat => mk.reduction(.concat, 2),
+        .put => mk.pure(.put, 3),
+        .get => mk.pure(.get, 2),
         .@"if" => .@"if",
     };
 }

@@ -43,6 +43,8 @@ pub const Object = union(enum) {
         list,
         map,
         concat,
+        put,
+        get,
 
         @"if",
 
@@ -72,6 +74,8 @@ pub const Object = union(enum) {
                 .not,
                 .list,
                 .map,
+                .put,
+                .get,
                 .@"if",
                 => |tag| @tagName(tag),
             };

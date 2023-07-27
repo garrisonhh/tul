@@ -65,6 +65,7 @@ pub const Inst = enum(u8) {
     concat,
     list,
     put, // map k v - map
+    get, // map k - v
 
     /// get metadata for how this instruction is parsed and affects the stack
     pub fn meta(self: Self) Meta {
@@ -100,6 +101,7 @@ pub const Inst = enum(u8) {
             .lor,
             .eq,
             .concat,
+            .get,
             => m(pops(2), 1, 0),
 
             .put => m(pops(3), 1, 0),

@@ -310,6 +310,23 @@ fn execInst(
             // push map
             frame.push(map_out);
         },
+        .get => {
+            const refs = frame.popArray(2);
+            defer gc.deacqAll(&refs);
+
+            const map_ref = refs[0];
+            const key = refs[1];
+
+            const map = &gc.get(map_ref).map;
+            if (map.get(key)) |value| {
+                // value exists
+                gc.acq(value);
+                frame.push(value);
+            } else {
+                // value does not exist, return a unit
+                frame.push(try gc.put(.{ .list = &.{} }));
+            }
+        },
     }
 }
 

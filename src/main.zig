@@ -211,6 +211,13 @@ const tests = struct {
         .{ "2", "(if false 1 2)" },
         .{ "(map)", "(map)" },
         .{ "(map 1 2)", "(map 1 2)" },
+        .{ "2", "(get (map 1 2) 1)" },
+        .{ "(list)", "(get (map 1 2) 3)" },
+        .{
+            \\"world"
+            ,
+            \\(get (put (map) "hello" "world") "hello")
+        },
     };
 };
 
