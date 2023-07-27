@@ -78,71 +78,6 @@ pub const Object = union(enum) {
         }
     };
 
-    /// tul's dictionary implementation
-    pub const Map = struct {
-        map: HashMapUnmanaged(Ref) = .{},
-        parent: ?Ref,
-        children: HashMapUnmanaged(void) = .{},
-
-        /// returns a ref to the map with the k/v pair added
-        pub fn put(
-            ally: Allocator,
-            ref: Ref,
-            key: Ref,
-            value: Ref,
-        ) Allocator.Error!Ref {
-            std.debug.assert(gc.get(ref).* == .map);
-
-            const map = &gc.getMut(ref).map;
-            const count = gc.refCount(ref);
-            const is_parent = map.children.count() > 0;
-
-            if (count == 1 and !is_parent) {
-                // can mutate this map safely
-                const res = try map.map.getOrPut(ally, key);
-                if (!res.found_existing) {
-                    gc.acq(key);
-                } else {
-                    gc.deacq(res.value_ptr.*);
-                }
-
-                gc.acq(value);
-                res.value_ptr.* = value;
-
-                return ref;
-            }
-
-            // fork a child
-            const parent: ?Ref = if (map.map.count() == 0) null else ref;
-            const child = try gc.put(.{ .map = .{ .parent = parent } });
-            gc.acq(ref);
-
-            // place kv in map
-            gc.acq(key);
-            gc.acq(value);
-            try gc.getMut(child).map.map.put(ally, key, value);
-
-            return child;
-        }
-
-        /// returns a ref to the output, which can be either a value or unit
-        pub fn get(ref: Ref, key: Ref) Allocator.Error!Ref {
-            std.debug.assert(gc.get(ref).* == .map);
-
-            const map = gc.get(ref).map;
-            if (map.map.get(key)) |value| {
-                // this map contains the key
-                return value;
-            } else if (map.parent) |parent| {
-                // parent might contain the key
-                return try get(parent, key);
-            }
-
-            // no entry found
-            return try gc.new(.{ .list = &.{} });
-        }
-    };
-
     bool: bool,
     int: i64,
     builtin: Builtin,
@@ -153,7 +88,7 @@ pub const Object = union(enum) {
     /// owned array of acq'd refs
     list: []const Ref,
     /// owns all keys and values stored
-    map: Map,
+    map: HashMapUnmanaged(Ref),
 
     pub const format = formatObject;
 
@@ -167,22 +102,13 @@ pub const Object = union(enum) {
             },
             .map => |*map| {
                 // hashmap
-                var entries = map.map.iterator();
+                var entries = map.iterator();
                 while (entries.next()) |entry| {
                     gc.deacq(entry.key_ptr.*);
                     gc.deacq(entry.value_ptr.*);
                 }
 
-                map.map.deinit(ally);
-
-                // children hashset
-                var children = map.children.keyIterator();
-                while (children.next()) |child| gc.deacq(child.*);
-
-                map.children.deinit(ally);
-
-                // parent
-                if (map.parent) |parent| gc.deacq(parent);
+                map.deinit(ally);
             },
         }
     }
@@ -202,8 +128,15 @@ pub const Object = union(enum) {
                 refs.* = try ally.dupe(Ref, refs.*);
                 gc.acqAll(refs.*);
             },
-            // cloning maps doesn't make sense
-            .map => @panic("attempted to clone a map"),
+            .map => |*map| {
+                map.* = try map.clone(ally);
+
+                var entries = map.iterator();
+                while (entries.next()) |entry| {
+                    gc.deacq(entry.key_ptr.*);
+                    gc.deacq(entry.value_ptr.*);
+                }
+            },
         }
 
         return obj;
@@ -248,8 +181,24 @@ pub const Object = union(enum) {
 
                 break :deep true;
             },
-            .map => {
-                @panic("TODO Object.eql for maps");
+            .map => |*map| map: {
+                const that_map = &that.map;
+                if (map.count() != that_map.count()) {
+                    break :map false;
+                }
+
+                var entries = map.iterator();
+                while (entries.next()) |entry| {
+                    const that_value = that_map.get(entry.key_ptr.*) orelse {
+                        break :map false;
+                    };
+
+                    if (!Object.eql(entry.value_ptr.*, that_value)) {
+                        break :map false;
+                    }
+                }
+
+                break :map true;
             },
         };
     }
@@ -303,15 +252,16 @@ pub const Object = union(enum) {
                 }
             },
             .map => |map| {
-                var iter = map.map.iterator();
+                // TODO this is not actually a proper hash since map iterators
+                // return things in arbitrary order. hashing a hashmap requires
+                // some kind of key sorting to happen
+                var iter = map.iterator();
                 while (iter.next()) |entry| {
                     hash(hasher, entry.key_ptr.*);
                     hash(hasher, entry.value_ptr.*);
                 }
 
-                if (map.parent) |parent| {
-                    hash(hasher, parent);
-                }
+                @panic("TODO hash a hashmap");
             },
         }
     }

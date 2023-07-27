@@ -96,7 +96,8 @@ fn lowerAppliedBuiltin(
         .map => {
             if (args.len % 2 != 0) return LowerError.BadArity;
 
-            const empty_map = try gc.put(.{ .map = .{ .parent = null } });
+            const empty_map = try gc.put(.{ .map = .{} });
+            defer gc.deacq(empty_map);
             try bob.loadConst(empty_map);
 
             var i: usize = 0;

@@ -285,13 +285,30 @@ fn execInst(
         },
         .put => {
             const refs = frame.popArray(3);
-            const map = refs[0];
+            const map_in = refs[0];
             const key = refs[1];
             const value = refs[2];
-            // map acq/deacq is handled by Object.Map behavior
-            defer gc.deacqAll(refs[1..]);
 
-            frame.push(try Object.Map.put(gc.ally, map, key, value));
+            // if there is one ref, the map can be safely mutated. otherwise,
+            // a clone must be made
+            const map_out = if (gc.refCount(map_in) == 1) map_in else clone: {
+                const cloned = try gc.get(map_in).clone(gc.ally);
+                gc.deacq(map_in);
+                break :clone try gc.put(cloned);
+            };
+
+            // add to this map, respecting ownership rules
+            const map = &gc.getMut(map_out).map;
+            const res = try map.getOrPut(gc.ally, key);
+            if (res.found_existing) {
+                gc.deacq(key);
+                gc.deacq(res.value_ptr.*);
+            }
+
+            res.value_ptr.* = value;
+
+            // push map
+            frame.push(map_out);
         },
     }
 }
