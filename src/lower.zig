@@ -24,6 +24,11 @@ const BuiltinMeta = union(enum) {
         params: usize,
     };
 
+    const Quoted = struct {
+        inst: bc.Inst,
+        params: usize,
+    };
+
     const Reduction = struct {
         inst: bc.Inst,
         min_arity: usize,
@@ -31,10 +36,11 @@ const BuiltinMeta = union(enum) {
 
     /// takes an exact number of parameters, outputs one value
     pure: Pure,
+    /// pure but parameters are lowered as constants (quoted code)
+    quoted: Quoted,
     /// reduce over some number of ops
     reduction: Reduction,
 
-    quote,
     list,
     map,
     @"if",
@@ -46,6 +52,10 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
             return .{ .pure = .{ .inst = inst, .params = params } };
         }
 
+        fn quoted(inst: bc.Inst, params: usize) BuiltinMeta {
+            return .{ .quoted = .{ .inst = inst, .params = params } };
+        }
+
         fn reduction(inst: bc.Inst, min_arity: usize) BuiltinMeta {
             return .{ .reduction = .{ .inst = inst, .min_arity = min_arity } };
         }
@@ -53,7 +63,7 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
 
     return switch (b) {
         .inspect => mk.pure(.inspect, 1),
-        .quote => .quote,
+        .quote => mk.quoted(.nop, 1),
         .eval => mk.pure(.eval, 1),
         .add => mk.reduction(.add, 2),
         .sub => mk.reduction(.sub, 2),
@@ -70,6 +80,7 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
         .put => mk.pure(.put, 3),
         .get => mk.pure(.get, 2),
         .@"if" => .@"if",
+        .@"fn" => mk.quoted(.@"fn", 2),
     };
 }
 
@@ -81,8 +92,15 @@ fn lowerAppliedBuiltin(
     switch (getBuiltinMetadata(b)) {
         .pure => |pure| {
             if (args.len != pure.params) return LowerError.BadArity;
+
             try lowerValues(bob, args);
             try bob.addInst(pure.inst);
+        },
+        .quoted => |quo| {
+            if (args.len != quo.params) return LowerError.BadArity;
+
+            for (args) |arg| try bob.loadConst(arg);
+            try bob.addInst(quo.inst);
         },
         .reduction => |red| {
             if (args.len < red.min_arity) return LowerError.BadArity;
@@ -92,11 +110,6 @@ fn lowerAppliedBuiltin(
                 try lowerValue(bob, args[i]);
                 try bob.addInst(red.inst);
             }
-        },
-        .quote => {
-            if (args.len != 1) return LowerError.BadArity;
-
-            try bob.loadConst(args[0]);
         },
         .list => {
             try lowerValues(bob, args);
@@ -183,22 +196,23 @@ fn lowerValues(bob: *Builder, refs: []const Object.Ref) Error!void {
 /// lower a ref being read as a value
 fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
     switch (gc.get(ref).*) {
-        .bool, .int, .tag, .string, .builtin => try bob.loadConst(ref),
+        .bool, .int, .tag, .string, .builtin, .@"fn" => try bob.loadConst(ref),
         .ident => |ident| try lowerValueIdent(bob, ident),
         .list => |refs| try lowerApplication(bob, ref, refs),
         .map => return Error.TodoLowerMap,
     }
 }
 
-/// lower some code to bytecode for execution
-///
-/// TODO this will very soon need to return a representation of an entire
-/// program rather than a single function (unless I can have function nesting
-/// or something? lambda-ness would be cool)
-pub fn lower(ally: Allocator, code: Object.Ref) Error!bc.Function {
-    var bob = Builder.init(ally);
+pub const Args = Builder.Args;
+
+/// lower some code to an executable function
+pub fn lower(args: ?*const Args, code: Object.Ref) Error!Object.Ref {
+    const args_or_default: *const Args = args orelse &.{};
+    var bob = Builder.init(gc.ally, args_or_default);
     errdefer bob.deinit();
+
     try lowerValue(&bob, code);
 
-    return bob.build();
+    const function = try bob.build();
+    return gc.put(.{ .@"fn" = function });
 }

@@ -31,13 +31,29 @@ pub fn deinit() void {
 pub const EvalError = lower.Error || vm.PipelineError;
 pub const ExecError = parser.Error || EvalError;
 
+pub fn evalFunction(
+    arglist: Object.Ref,
+    code: Object.Ref,
+) lower.Error!Object.Ref {
+    var args = lower.Args{};
+    defer args.deinit(ally);
+
+    const list = gc.get(arglist).list;
+    for (list, 0..) |ref, i| {
+        const id = gc.get(ref).ident;
+        try args.put(ally, id, @intCast(i));
+    }
+
+    return try lower.lower(&args, code);
+}
+
 pub fn eval(code: Object.Ref) EvalError!Object.Ref {
-    const func = try lower.lower(ally, code);
-    defer func.deinit(ally);
+    const func = try lower.lower(null, code);
+    defer gc.deacq(func);
 
     if (builtin.is_test and test_options.verbose) {
         stderr.print("[evaluating bytecode]\n", .{}) catch {};
-        func.display(stderr) catch {};
+        gc.get(func).@"fn".display(stderr) catch {};
     }
 
     return try vm.run(func);

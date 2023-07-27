@@ -2,9 +2,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
 const gc = @import("gc.zig");
+const bc = @import("bytecode.zig");
 const formatObject = @import("formatters.zig").formatObject;
 
 /// canonical tul object
+///
+/// objects own all of their internal data, and acq all of their refs
 pub const Object = union(enum) {
     const Self = @This();
     pub const Tag = std.meta.Tag(Self);
@@ -49,6 +52,7 @@ pub const Object = union(enum) {
         get,
 
         @"if",
+        @"fn",
 
         /// finds a builtin from its name
         pub fn fromName(s: []const u8) ?Builtin {
@@ -79,6 +83,7 @@ pub const Object = union(enum) {
                 .put,
                 .get,
                 .@"if",
+                .@"fn",
                 => |tag| @tagName(tag),
             };
         }
@@ -87,16 +92,12 @@ pub const Object = union(enum) {
     bool: bool,
     int: i64,
     builtin: Builtin,
-    /// owned string
     string: []const u8,
-    /// owned string
     ident: []const u8,
-    /// owned string
     tag: []const u8,
-    /// owned array of acq'd refs
     list: []const Ref,
-    /// owns all keys and values stored
     map: HashMapUnmanaged(Ref),
+    @"fn": bc.Function,
 
     pub const format = formatObject;
 
@@ -109,7 +110,6 @@ pub const Object = union(enum) {
                 ally.free(refs);
             },
             .map => |*map| {
-                // hashmap
                 var entries = map.iterator();
                 while (entries.next()) |entry| {
                     gc.deacq(entry.key_ptr.*);
@@ -118,6 +118,7 @@ pub const Object = union(enum) {
 
                 map.deinit(ally);
             },
+            .@"fn" => |f| f.deinit(ally),
         }
     }
 
@@ -144,6 +145,9 @@ pub const Object = union(enum) {
                     gc.deacq(entry.key_ptr.*);
                     gc.deacq(entry.value_ptr.*);
                 }
+            },
+            .@"fn" => |*f| {
+                f.* = try f.clone(ally);
             },
         }
 
@@ -208,6 +212,9 @@ pub const Object = union(enum) {
 
                 break :map true;
             },
+            .@"fn" => {
+                @panic("TODO does it make sense to compare functions..?");
+            },
         };
     }
 
@@ -253,9 +260,8 @@ pub const Object = union(enum) {
             inline .bool, .int, .builtin => |v| hasher.update(b(&v)),
             // hash bytes directly
             .string, .tag => |s| hasher.update(s),
-            // do lookup (?)
             .ident => {
-                @panic("TODO hash ident");
+                @panic("TODO hash ident (with lookup?)");
             },
             // recurse
             .list => |children| {
@@ -273,7 +279,10 @@ pub const Object = union(enum) {
                     hash(hasher, entry.value_ptr.*);
                 }
 
-                @panic("TODO hash a hashmap");
+                @panic("TODO hash a hashmap (?)");
+            },
+            .@"fn" => {
+                @panic("TODO hash a function (?)");
             },
         }
     }

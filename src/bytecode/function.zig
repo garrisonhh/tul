@@ -12,6 +12,8 @@ const Self = @This();
 consts: []const Object.Ref,
 /// bytecode
 code: []const u8,
+/// number of input parameters
+param_count: usize,
 /// max refs required for stack vm
 stack_size: usize,
 
@@ -19,6 +21,19 @@ pub fn deinit(self: Self, ally: Allocator) void {
     gc.deacqAll(self.consts);
     ally.free(self.consts);
     ally.free(self.code);
+}
+
+pub fn clone(self: Self, ally: Allocator) Allocator.Error!Self {
+    const consts = try ally.dupe(Object.Ref, self.consts);
+    gc.acqAll(consts);
+    const code = try ally.dupe(u8, self.code);
+
+    return Self{
+        .consts = consts,
+        .code = code,
+        .param_count = self.param_count,
+        .stack_size = self.stack_size,
+    };
 }
 
 /// print this function's code

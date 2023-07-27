@@ -35,8 +35,10 @@ pub const Inst = enum(u8) {
     nop = 0,
 
     load_const,
+    load_abs, // dupe absolute stack index
     inspect,
     eval,
+    @"fn",
 
     jump, // jump to addr
     branch, // if cond, jump to addr
@@ -79,21 +81,25 @@ pub const Inst = enum(u8) {
 
         return switch (self) {
             .nop => m(pops(0), 0, 0),
-            .load_const => m(pops(0), 1, 4),
             .jump => m(pops(0), 0, @sizeOf(AddressInt)),
+            .drop => m(pops(1), 0, 0),
             .branch => m(pops(1), 0, @sizeOf(AddressInt)),
             .swap => m(pops(2), 2, 0),
             .dup => m(pops(1), 2, 0),
             .over => m(pops(2), 3, 0),
             .rot => m(pops(3), 3, 0),
-            .drop => m(pops(1), 0, 0),
             .list => m(.consumed, 1, 4),
+
+            .load_const,
+            .load_abs,
+            => m(pops(0), 1, 4),
 
             .inspect,
             .eval,
             .lnot,
             => m(pops(1), 1, 0),
 
+            .@"fn",
             .add,
             .sub,
             .mul,

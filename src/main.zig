@@ -13,7 +13,7 @@ pub fn main() !void {
     defer pipes.deinit();
 
     const code =
-        \\(eval (quote (+ 1 2 3 4)))
+        \\(fn () (+ 1 2))
         \\
     ;
 
@@ -184,6 +184,8 @@ const tests = struct {
         .{ "4", "(eval (quote (+ 1 3)))" },
         .{ "/", "(eval @/)" },
     };
+
+    const functions = [_]Test{.{ "0", "(fn () (+ 1 2))" }};
 };
 
 test "tul" {
@@ -193,4 +195,5 @@ test "tul" {
     try runTestSet(&tests.literals);
     try runTestSet(&tests.operators);
     try runTestSet(&tests.meta);
+    try runTestSet(&tests.functions);
 }

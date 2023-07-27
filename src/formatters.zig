@@ -39,5 +39,8 @@ pub fn formatObject(
 
             try writer.writeAll("}");
         },
+        .@"fn" => |f| {
+            try writer.print("<fn (takes {d})>", .{f.param_count});
+        },
     }
 }

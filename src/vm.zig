@@ -86,15 +86,19 @@ pub const Frame = struct {
         return arr;
     }
 
+    pub fn getAbs(self: Self, index: usize) Object.Ref {
+        self.assertStack(index);
+        return self.stack.items[index];
+    }
+
     /// jump to an instruction address
     pub fn jump(self: *Self, index: usize) void {
         self.iter.jump(index);
     }
 };
 
-/// context for execution (this is not actually a parallel thread, though I'm
-/// designing it so it might be in the future)
-const Thread = struct {
+/// context for execution
+const Process = struct {
     const Self = @This();
 
     const CallStack = std.SinglyLinkedList(Frame);
@@ -147,6 +151,11 @@ fn execInst(
             gc.acq(ref);
             frame.push(ref);
         },
+        .load_abs => {
+            const ref = frame.getAbs(consumed);
+            gc.acq(ref);
+            frame.push(ref);
+        },
         .inspect => {
             const obj = gc.get(frame.peek());
             std.debug.print("[inspect] {}\n", .{obj});
@@ -155,6 +164,15 @@ fn execInst(
             const code = frame.pop();
             defer gc.deacq(code);
             frame.push(try pipes.eval(code));
+        },
+        .@"fn" => {
+            const refs = frame.popArray(2);
+            defer gc.deacqAll(&refs);
+
+            const args = refs[0];
+            const body = refs[1];
+
+            frame.push(try pipes.evalFunction(args, body));
         },
 
         // control flow
@@ -338,11 +356,15 @@ fn execInst(
     }
 }
 
-/// run a program on the vm
-pub fn run(main: bc.Function) Error!Object.Ref {
-    var thread = Thread{};
-    var frame = try thread.pushFrame(gc.ally, &main);
-    defer thread.popFrame(gc.ally);
+/// run a program on the vm (in the form of a function that takes 0 parameters)
+pub fn run(main: Object.Ref) Error!Object.Ref {
+    const func = &gc.get(main).@"fn";
+    std.debug.assert(func.param_count == 0);
+
+    // start process
+    var proc = Process{};
+    var frame = try proc.pushFrame(gc.ally, func);
+    defer proc.popFrame(gc.ally);
 
     // main vm loop
     var consumed: u64 = undefined;
