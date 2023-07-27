@@ -1,54 +1,23 @@
 const builtin = @import("builtin");
 const test_options = @import("test_options");
 const std = @import("std");
-const stdout = std.io.getStdOut().writer();
 const stderr = std.io.getStdErr().writer();
+const stdout = std.io.getStdOut().writer();
 const com = @import("common");
 const gc = @import("gc.zig");
-const parser = @import("parser.zig");
-const lower = @import("lower.zig");
-const vm = @import("vm.zig");
+const pipes = @import("pipes.zig");
 const Object = @import("object.zig").Object;
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const ally = gpa.allocator();
-
-fn init() error{}!void {
-    // stub
-}
-
-fn deinit() void {
-    gc.deinit();
-    _ = gpa.deinit();
-}
-
-const ExecError = parser.Error || lower.Error || vm.Error;
-
-/// one execution cycle
-fn exec(program: []const u8) ExecError!Object.Ref {
-    const code = try parser.parse(ally, program);
-    defer gc.deacq(code);
-    const func = try lower.lower(ally, code);
-    defer func.deinit(ally);
-
-    if (builtin.is_test and test_options.verbose) {
-        stderr.print("[executing bytecode]\n", .{}) catch {};
-        func.display(stderr) catch {};
-    }
-
-    return try vm.run(func);
-}
-
 pub fn main() !void {
-    try init();
-    defer deinit();
+    try pipes.init();
+    defer pipes.deinit();
 
     const code =
-        \\(map 1 2 3 4)
+        \\(eval (quote (+ 1 2 3 4)))
         \\
     ;
 
-    const out = try exec(code);
+    const out = try pipes.exec(code);
     defer gc.deacq(out);
 
     try stdout.print("{}\n", .{gc.get(out)});
@@ -63,15 +32,15 @@ comptime {
 }
 
 const TestCaseError =
-    ExecError ||
+    pipes.ExecError ||
     @TypeOf(stderr).Error ||
     error{ TestFailure, UnreleasedMemory };
 
 /// a test case; both inputs should match
 fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
-    const exp = try exec(expected);
+    const exp = try pipes.exec(expected);
     defer gc.deacq(exp);
-    const got = try exec(actual);
+    const got = try pipes.exec(actual);
     defer gc.deacq(got);
 
     // check for equality
@@ -222,8 +191,8 @@ const tests = struct {
 };
 
 test "tul" {
-    try init();
-    defer deinit();
+    try pipes.init();
+    defer pipes.deinit();
 
     try runTestSet(&tests.literals);
     try runTestSet(&tests.operators);

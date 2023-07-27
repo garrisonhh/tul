@@ -34,6 +34,7 @@ const BuiltinMeta = union(enum) {
     /// reduce over some number of ops
     reduction: Reduction,
 
+    quote,
     list,
     map,
     @"if",
@@ -52,6 +53,8 @@ fn getBuiltinMetadata(b: Object.Builtin) BuiltinMeta {
 
     return switch (b) {
         .inspect => mk.pure(.inspect, 1),
+        .quote => .quote,
+        .eval => mk.pure(.eval, 1),
         .add => mk.reduction(.add, 2),
         .sub => mk.reduction(.sub, 2),
         .mul => mk.reduction(.mul, 2),
@@ -89,6 +92,11 @@ fn lowerAppliedBuiltin(
                 try lowerValue(bob, args[i]);
                 try bob.addInst(red.inst);
             }
+        },
+        .quote => {
+            if (args.len != 1) return LowerError.BadArity;
+
+            try bob.loadConst(args[0]);
         },
         .list => {
             try lowerValues(bob, args);

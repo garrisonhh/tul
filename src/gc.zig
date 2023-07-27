@@ -15,7 +15,6 @@ var mem = Object.RcMap{};
 
 pub fn deinit() void {
     mem.deinit(ally);
-
     _ = gpa.deinit();
 
     // in testing, gc may be reinitialized

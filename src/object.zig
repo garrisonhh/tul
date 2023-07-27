@@ -27,6 +27,8 @@ pub const Object = union(enum) {
     /// builtin applicables
     pub const Builtin = enum {
         inspect,
+        quote,
+        eval,
 
         add,
         sub,
@@ -48,8 +50,6 @@ pub const Object = union(enum) {
 
         @"if",
 
-        // TODO quote, unquote
-
         /// finds a builtin from its name
         pub fn fromName(s: []const u8) ?Builtin {
             return inline for (comptime std.enums.values(Builtin)) |b| {
@@ -69,6 +69,8 @@ pub const Object = union(enum) {
                 .concat => "++",
 
                 inline .inspect,
+                .quote,
+                .eval,
                 .@"and",
                 .@"or",
                 .not,
@@ -273,11 +275,11 @@ pub const Object = union(enum) {
 
 // tests =======================================================================
 
+const pipes = @import("pipes.zig");
+
 test "hashmap" {
-    // TODO make main.init, main.deinit accessible from outside of main
-    // for testing purposes? right now this could break if I add code to
-    // those functions
-    defer gc.deinit();
+    try pipes.init();
+    defer pipes.deinit();
 
     var map = Object.HashMap(usize).init(std.testing.allocator);
     defer map.deinit();

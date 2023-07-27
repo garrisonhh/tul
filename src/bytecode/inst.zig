@@ -36,6 +36,7 @@ pub const Inst = enum(u8) {
 
     load_const,
     inspect,
+    eval,
 
     jump, // jump to addr
     branch, // if cond, jump to addr
@@ -89,6 +90,7 @@ pub const Inst = enum(u8) {
             .list => m(.consumed, 1, 4),
 
             .inspect,
+            .eval,
             .lnot,
             => m(pops(1), 1, 0),
 

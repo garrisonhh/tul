@@ -3,6 +3,7 @@ const is_debug = builtin.mode == .Debug;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const gc = @import("gc.zig");
+const pipes = @import("pipes.zig");
 const bc = @import("bytecode.zig");
 const Function = bc.Function;
 const Inst = bc.Inst;
@@ -125,7 +126,9 @@ const Thread = struct {
 
 // =============================================================================
 
-pub const Error = Allocator.Error || bc.Iterator.Error;
+/// needs to exist to prevent dependency loop between vm.Error and EvalError
+pub const PipelineError = Allocator.Error || bc.Iterator.Error;
+pub const Error = PipelineError || pipes.EvalError;
 
 fn execInst(
     frame_p: **Frame,
@@ -147,6 +150,11 @@ fn execInst(
         .inspect => {
             const obj = gc.get(frame.peek());
             std.debug.print("[inspect] {}\n", .{obj});
+        },
+        .eval => {
+            const code = frame.pop();
+            defer gc.deacq(code);
+            frame.push(try pipes.eval(code));
         },
 
         // control flow

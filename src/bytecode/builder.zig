@@ -57,7 +57,8 @@ fn fullyNailed(self: *const Self) bool {
     return nailed;
 }
 
-/// frees all builder memory, you can safely ignore deinit if you call this
+/// all memory is freed or moved to Function, you can safely ignore deinit if
+/// you call this
 pub fn build(self: *Self) Allocator.Error!Function {
     std.debug.assert(self.fullyNailed());
     self.backrefs.deinit(self.ally);
