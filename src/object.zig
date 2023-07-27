@@ -90,6 +90,8 @@ pub const Object = union(enum) {
     /// owned string
     string: []const u8,
     /// owned string
+    ident: []const u8,
+    /// owned string
     tag: []const u8,
     /// owned array of acq'd refs
     list: []const Ref,
@@ -101,7 +103,7 @@ pub const Object = union(enum) {
     pub fn deinit(self: *Self, ally: Allocator) void {
         switch (self.*) {
             .bool, .int, .builtin => {},
-            .string, .tag => |str| ally.free(str),
+            .string, .ident, .tag => |str| ally.free(str),
             .list => |refs| {
                 gc.deacqAll(refs);
                 ally.free(refs);
@@ -125,7 +127,7 @@ pub const Object = union(enum) {
         switch (obj) {
             .bool, .int, .builtin => {},
             // shallow dupe
-            .string, .tag => |*str| {
+            .string, .ident, .tag => |*str| {
                 const Item = @typeInfo(@TypeOf(str.ptr)).Pointer.child;
                 str.* = try ally.dupe(Item, str.*);
             },
@@ -165,7 +167,7 @@ pub const Object = union(enum) {
             => |data, tag| data == @field(that, @tagName(tag)),
 
             // mem comparison
-            inline .string, .tag => |slice, tag| mem: {
+            inline .string, .ident, .tag => |slice, tag| mem: {
                 const Item = @typeInfo(@TypeOf(slice)).Pointer.child;
 
                 const other_slice = @field(that.*, @tagName(tag));
@@ -251,6 +253,10 @@ pub const Object = union(enum) {
             inline .bool, .int, .builtin => |v| hasher.update(b(&v)),
             // hash bytes directly
             .string, .tag => |s| hasher.update(s),
+            // do lookup (?)
+            .ident => {
+                @panic("TODO hash ident");
+            },
             // recurse
             .list => |children| {
                 for (children) |child| {
@@ -290,6 +296,7 @@ test "hashmap" {
         .{ .int = 0 },
         .{ .int = -1 },
         .{ .int = std.math.maxInt(i64) },
+        .{ .tag = "+" },
         .{ .string = "hello, world!" },
     };
 

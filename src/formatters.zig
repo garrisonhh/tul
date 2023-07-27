@@ -14,6 +14,7 @@ pub fn formatObject(
         .int => |n| try writer.print("{}", .{n}),
         .builtin => |b| try writer.print("<builtin>{s}", .{b.name()}),
         .string => |s| try writer.print("\"{}\"", .{std.zig.fmtEscapes(s)}),
+        .ident => |id| try writer.writeAll(id),
         .tag => |t| try writer.print("@{s}", .{t}),
         .list => |refs| {
             try writer.writeAll("(");

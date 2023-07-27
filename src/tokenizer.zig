@@ -12,6 +12,7 @@ pub const Token = struct {
         lparen,
         rparen,
         ident,
+        tag,
         number,
         string,
     };
@@ -61,6 +62,17 @@ fn isIdentStart(c: Codepoint) bool {
         .Emoticons,
         .MiscellaneousSymbolsAndPictographs,
         => b: {
+            // banned chars
+            const ct = Codepoint.ct;
+            const banned = [_]Codepoint{
+                ct("@"),
+            };
+
+            for (banned) |bc| {
+                if (bc.eql(c)) break :b false;
+            }
+
+            // banned char classes
             const is_space = c.isSpace();
             const is_digit = c.isDigit(10);
             const is_sym = Symbol.get(c) != null;
@@ -74,7 +86,19 @@ fn isIdentStart(c: Codepoint) bool {
 /// valid codepoints for the tail of an identifier
 /// TODO extend this using js or c++ spec as examples
 fn isIdentInner(c: Codepoint) bool {
-    return isIdentStart(c) or c.isDigit(10);
+    return switch (c.getUnicodeBlock()) {
+        .BasicLatin,
+        .Latin1Supplement,
+        .Emoticons,
+        .MiscellaneousSymbolsAndPictographs,
+        => b: {
+            const is_space = c.isSpace();
+            const is_sym = Symbol.get(c) != null;
+
+            break :b !is_space and !is_sym;
+        },
+        else => false,
+    };
 }
 
 const Self = @This();
@@ -164,6 +188,9 @@ pub fn next(self: *Self) Error!?Token {
         } else if (isIdentStart(c)) {
             try self.acceptWhile(isIdentInner);
             break :t .ident;
+        } else if (c.eql(Codepoint.ct("@"))) {
+            try self.acceptWhile(isIdentInner);
+            break :t .tag;
         } else {
             std.debug.print("disallowed character: `{}`\n", .{c});
             std.debug.print("in unicode block: {}\n", .{c.getUnicodeBlock()});

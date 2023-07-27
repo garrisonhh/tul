@@ -183,8 +183,8 @@ fn lowerValues(bob: *Builder, refs: []const Object.Ref) Error!void {
 /// lower a ref being read as a value
 fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
     switch (gc.get(ref).*) {
-        .bool, .int, .string, .builtin => try bob.loadConst(ref),
-        .tag => |ident| try lowerValueIdent(bob, ident),
+        .bool, .int, .tag, .string, .builtin => try bob.loadConst(ref),
+        .ident => |ident| try lowerValueIdent(bob, ident),
         .list => |refs| try lowerApplication(bob, ref, refs),
         .map => return Error.TodoLowerMap,
     }

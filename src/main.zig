@@ -188,6 +188,16 @@ const tests = struct {
             \\(get (put (map) "hello" "world") "hello")
         },
     };
+
+    const meta = [_]Test{
+        .{ "1", "(quote 1)" },
+        .{ "true", "(quote true)" },
+        .{ "(list 1 2 3)", "(quote (1 2 3))" },
+        .{ "(list @+ 2 2)", "(quote (+ 2 2))" },
+        .{ "(list @+ @list @put)", "(quote (+ list put))" },
+        .{ "4", "(eval (quote (+ 1 3)))" },
+        .{ "/", "(eval @/)" },
+    };
 };
 
 test "tul" {
@@ -196,4 +206,5 @@ test "tul" {
 
     try runTestSet(&tests.literals);
     try runTestSet(&tests.operators);
+    try runTestSet(&tests.meta);
 }
