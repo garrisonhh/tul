@@ -167,9 +167,14 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
             const slice = tok.slice(ctx.text);
 
             // remove @ symbol
-            const tag = slice[1..];
+            const tag = try gc.new(.{ .tag = slice[1..] });
+            defer gc.deacq(tag);
 
-            break :t try gc.new(.{ .tag = tag });
+            // quote the tag
+            const quote = try gc.new(.{ .tag = "quote" });
+            defer gc.deacq(quote);
+
+            break :t try gc.new(.{ .list = &.{ quote, tag } });
         },
         .number => t: {
             ctx.accept();

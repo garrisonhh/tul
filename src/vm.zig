@@ -14,12 +14,16 @@ pub const Frame = struct {
     const Self = @This();
     const Stack = std.ArrayListUnmanaged(Object.Ref);
 
+    func_ref: Object.Ref,
     func: *const Function,
     stack: Stack,
     iter: bc.Iterator,
 
-    pub fn init(ally: Allocator, func: *const Function) Allocator.Error!Self {
+    pub fn init(ally: Allocator, func_ref: Object.Ref) Allocator.Error!Self {
+        gc.acq(func_ref);
+        const func = &gc.get(func_ref).@"fn";
         return Self{
+            .func_ref = func_ref,
             .func = func,
             .stack = try Stack.initCapacity(ally, func.stack_size),
             .iter = bc.iterator(func.code),
@@ -27,6 +31,9 @@ pub const Frame = struct {
     }
 
     pub fn deinit(self: *Self, ally: Allocator) void {
+        gc.deacq(self.func_ref);
+        // params may be left over on the stack when this terminates
+        gc.deacqAll(self.stack.items);
         self.stack.deinit(ally);
     }
 
@@ -105,26 +112,37 @@ const Process = struct {
 
     stack: CallStack = .{},
 
+    fn getFrame(self: *Self) ?*Frame {
+        return if (self.stack.first) |node| &node.data else null;
+    }
+
     /// adds a frame to the call stack
-    fn pushFrame(
+    fn call(
         self: *Self,
         ally: Allocator,
-        func: *const Function,
-    ) Allocator.Error!*Frame {
-        const frame = try Frame.init(ally, func);
+        func_ref: Object.Ref,
+        args: []const Object.Ref,
+    ) Allocator.Error!void {
+        // make and store frame
+        const frame = try Frame.init(ally, func_ref);
         const node = try ally.create(CallStack.Node);
         node.* = .{ .data = frame };
 
         self.stack.prepend(node);
 
-        return &node.data;
+        // add args
+        node.data.pushAll(args);
     }
 
     /// removes a frame from the call stack
-    fn popFrame(self: *Self, ally: Allocator) void {
+    fn ret(self: *Self, ally: Allocator) Object.Ref {
         const node = self.stack.popFirst().?;
+        const value = node.data.pop();
+
         node.data.deinit(ally);
         ally.destroy(node);
+
+        return value;
     }
 };
 
@@ -135,11 +153,11 @@ pub const PipelineError = Allocator.Error || bc.Iterator.Error;
 pub const Error = PipelineError || pipes.EvalError;
 
 fn execInst(
-    frame_p: **Frame,
+    proc: *Process,
+    frame: *Frame,
     inst: bc.Inst,
     consumed: u64,
 ) Error!void {
-    const frame = frame_p.*;
     const func = frame.func;
 
     // execute
@@ -176,6 +194,17 @@ fn execInst(
         },
 
         // control flow
+        .call => {
+            const refs = try frame.popSliceAlloc(gc.ally, consumed);
+            defer gc.ally.free(refs);
+
+            const app = refs[0];
+            defer gc.deacq(app);
+            // arg ownership is passed over to called function
+            const args = refs[1..];
+
+            _ = try proc.call(gc.ally, app, args);
+        },
         .jump => {
             frame.jump(consumed);
         },
@@ -363,15 +392,30 @@ pub fn run(main: Object.Ref) Error!Object.Ref {
 
     // start process
     var proc = Process{};
-    var frame = try proc.pushFrame(gc.ally, func);
-    defer proc.popFrame(gc.ally);
+    try proc.call(gc.ally, main, &.{});
 
     // main vm loop
-    var consumed: u64 = undefined;
-    while (try frame.iter.next(&consumed)) |inst| {
-        try execInst(&frame, inst, consumed);
-    }
+    while (true) {
+        var consumed: u64 = undefined;
 
-    // main should return one value
-    return frame.pop();
+        // get next instruction and frame, if program continues
+        var frame = proc.getFrame().?;
+        const inst = inst: while (true) {
+            if (try frame.iter.next(&consumed)) |inst| {
+                break :inst inst;
+            }
+
+            const returned = proc.ret(gc.ally);
+            if (proc.getFrame()) |next_frame| {
+                // return value to previous function
+                frame = next_frame;
+                frame.push(returned);
+            } else {
+                // return value to main
+                return returned;
+            }
+        };
+
+        try execInst(&proc, frame, inst, consumed);
+    }
 }

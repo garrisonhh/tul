@@ -40,6 +40,7 @@ pub const Inst = enum(u8) {
     eval,
     @"fn",
 
+    call,
     jump, // jump to addr
     branch, // if cond, jump to addr
 
@@ -88,7 +89,10 @@ pub const Inst = enum(u8) {
             .dup => m(pops(1), 2, 0),
             .over => m(pops(2), 3, 0),
             .rot => m(pops(3), 3, 0),
-            .list => m(.consumed, 1, 4),
+
+            .list,
+            .call,
+            => m(.consumed, 1, 4),
 
             .load_const,
             .load_abs,

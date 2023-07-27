@@ -14,7 +14,7 @@ code: []const u8,
 index: usize = 0,
 
 fn nextByte(self: *Self) ?u8 {
-    if (self.index == self.code.len) {
+    if (self.index >= self.code.len) {
         return null;
     }
 

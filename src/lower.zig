@@ -10,7 +10,6 @@ const LowerError = error{
 
     // TODO eradicate these
     TodoVars,
-    TodoApplied,
     TodoLowerMap,
 };
 
@@ -172,8 +171,9 @@ fn lowerApplication(
         }
     }
 
-    // evaluate applied as a value and call it
-    return Error.TodoApplied;
+    // evaluate applied and args as values and call
+    try lowerValues(bob, refs);
+    try bob.addInstC(.call, @as(u32, @intCast(refs.len)));
 }
 
 /// lower the evaluation of a tag as an identifier
@@ -183,8 +183,11 @@ fn lowerValueIdent(bob: *Builder, ident: []const u8) Error!void {
         const ref = try gc.new(.{ .builtin = b });
         defer gc.deacq(ref);
         try bob.loadConst(ref);
+    } else if (bob.hasArg(ident)) {
+        // load an arg
+        try bob.loadArg(ident);
     } else {
-        // read a var
+        // read an env variable
         return LowerError.TodoVars;
     }
 }
@@ -196,8 +199,13 @@ fn lowerValues(bob: *Builder, refs: []const Object.Ref) Error!void {
 /// lower a ref being read as a value
 fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
     switch (gc.get(ref).*) {
-        .bool, .int, .tag, .string, .builtin, .@"fn" => try bob.loadConst(ref),
-        .ident => |ident| try lowerValueIdent(bob, ident),
+        .bool,
+        .int,
+        .string,
+        .builtin,
+        .@"fn",
+        => try bob.loadConst(ref),
+        .tag => |ident| try lowerValueIdent(bob, ident),
         .list => |refs| try lowerApplication(bob, ref, refs),
         .map => return Error.TodoLowerMap,
     }

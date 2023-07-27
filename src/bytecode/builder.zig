@@ -84,7 +84,7 @@ pub fn hasArg(self: *const Self, ident: []const u8) bool {
     return self.args.contains(ident);
 }
 
-pub fn loadArg(self: *Self, ident: []const u8) void {
+pub fn loadArg(self: *Self, ident: []const u8) Allocator.Error!void {
     const index = self.args.get(ident).?;
     try self.addInstC(.load_abs, index);
 }

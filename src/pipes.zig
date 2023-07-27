@@ -35,16 +35,25 @@ pub fn evalFunction(
     arglist: Object.Ref,
     code: Object.Ref,
 ) lower.Error!Object.Ref {
+    // make args
     var args = lower.Args{};
     defer args.deinit(ally);
 
     const list = gc.get(arglist).list;
     for (list, 0..) |ref, i| {
-        const id = gc.get(ref).ident;
+        const id = gc.get(ref).tag;
         try args.put(ally, id, @intCast(i));
     }
 
-    return try lower.lower(&args, code);
+    // lower
+    const func = try lower.lower(&args, code);
+
+    if (builtin.is_test and test_options.verbose) {
+        stderr.print("[lowered function bytecode]\n", .{}) catch {};
+        gc.get(func).@"fn".display(stderr) catch {};
+    }
+
+    return func;
 }
 
 pub fn eval(code: Object.Ref) EvalError!Object.Ref {

@@ -93,7 +93,6 @@ pub const Object = union(enum) {
     int: i64,
     builtin: Builtin,
     string: []const u8,
-    ident: []const u8,
     tag: []const u8,
     list: []const Ref,
     map: HashMapUnmanaged(Ref),
@@ -104,7 +103,7 @@ pub const Object = union(enum) {
     pub fn deinit(self: *Self, ally: Allocator) void {
         switch (self.*) {
             .bool, .int, .builtin => {},
-            .string, .ident, .tag => |str| ally.free(str),
+            .string, .tag => |str| ally.free(str),
             .list => |refs| {
                 gc.deacqAll(refs);
                 ally.free(refs);
@@ -128,7 +127,7 @@ pub const Object = union(enum) {
         switch (obj) {
             .bool, .int, .builtin => {},
             // shallow dupe
-            .string, .ident, .tag => |*str| {
+            .string, .tag => |*str| {
                 const Item = @typeInfo(@TypeOf(str.ptr)).Pointer.child;
                 str.* = try ally.dupe(Item, str.*);
             },
@@ -171,7 +170,7 @@ pub const Object = union(enum) {
             => |data, tag| data == @field(that, @tagName(tag)),
 
             // mem comparison
-            inline .string, .ident, .tag => |slice, tag| mem: {
+            inline .string, .tag => |slice, tag| mem: {
                 const Item = @typeInfo(@TypeOf(slice)).Pointer.child;
 
                 const other_slice = @field(that.*, @tagName(tag));
@@ -260,9 +259,6 @@ pub const Object = union(enum) {
             inline .bool, .int, .builtin => |v| hasher.update(b(&v)),
             // hash bytes directly
             .string, .tag => |s| hasher.update(s),
-            .ident => {
-                @panic("TODO hash ident (with lookup?)");
-            },
             // recurse
             .list => |children| {
                 for (children) |child| {

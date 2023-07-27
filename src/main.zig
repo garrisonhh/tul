@@ -13,7 +13,7 @@ pub fn main() !void {
     defer pipes.deinit();
 
     const code =
-        \\(fn () (+ 1 2))
+        \\((fn (a) a) 1)
         \\
     ;
 
@@ -185,7 +185,16 @@ const tests = struct {
         .{ "/", "(eval @/)" },
     };
 
-    const functions = [_]Test{.{ "0", "(fn () (+ 1 2))" }};
+    const functions = [_]Test{
+        .{ "0", "((fn () 0))" },
+        .{ "420", "((fn (a) a) 420)" },
+        .{ "430", "((fn (a) (+ 10 a)) 420)" },
+        .{
+            \\"hello, world!"
+            ,
+            \\((fn (a b) (++ a b)) "hello, " "world!")
+        },
+    };
 };
 
 test "tul" {
