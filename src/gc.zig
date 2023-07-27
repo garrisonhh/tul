@@ -18,7 +18,7 @@ pub fn deinit() void {
 
     _ = gpa.deinit();
 
-    // in testing, vm may be reinitialized
+    // in testing, gc may be reinitialized
     if (builtin.is_test) {
         mem = .{};
         gpa = .{};
@@ -27,8 +27,6 @@ pub fn deinit() void {
 
 /// displays memory to stderr for debugging purposes
 pub fn inspectMemory() void {
-    std.debug.assert(in_debug);
-
     std.debug.print("id\trc\tvalue\n", .{});
 
     var entries = mem.iterator();
@@ -66,10 +64,6 @@ fn ReturnType(comptime func: anytype) type {
     return @typeInfo(@TypeOf(func)).Fn.return_type.?;
 }
 
-/// turn `fn(Object.Ref) T` into a version that operates on and returns an array
-///
-/// get output with '.f' since returning parametrized function types isn't
-/// currently supported afaik
 fn arrayify_lower(comptime func: anytype) type {
     return struct {
         fn f(
@@ -95,6 +89,7 @@ fn arrayify_lower(comptime func: anytype) type {
     };
 }
 
+/// turn `fn(Object.Ref) T` into a version that operates on and returns an array
 fn arrayify(comptime func: anytype) @TypeOf(arrayify_lower(func).f) {
     return arrayify_lower(func).f;
 }
