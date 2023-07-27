@@ -78,21 +78,7 @@ fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
 fn runTestSet(set: []const tests.Test) TestCaseError!void {
     for (set) |case| {
         runTest(case[0], case[1]) catch |e| {
-            try stderr.print(
-                \\test failed with: {[err]}
-                \\[expected]
-                \\{[expected]s}
-                \\[actual]
-                \\{[actual]s}
-                \\
-            ,
-                .{
-                    .err = e,
-                    .expected = case[0],
-                    .actual = case[1],
-                },
-            );
-
+            try stderr.print("test failed with error: {s}", .{@errorName(e)});
             return e;
         };
 
