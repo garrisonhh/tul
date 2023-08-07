@@ -2,9 +2,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
 const gc = @import("gc.zig");
-const Tokenizer = @import("tokenizer.zig");
-const Token = Tokenizer.Token;
+const registry = @import("registry.zig");
 const Object = @import("object.zig").Object;
+const Tokenizer = @import("parser/tokenizer.zig");
+const Token = Tokenizer.Token;
 
 const ParseError = error{
     UnexpectedEof,
@@ -20,15 +21,15 @@ const Context = struct {
     const Self = @This();
 
     ally: Allocator,
-    text: []const u8,
+    file: registry.FileRef,
     tokens: Tokenizer,
     cache: ?Token = null,
 
-    fn init(ally: Allocator, text: []const u8) Self {
+    fn init(ally: Allocator, file: registry.FileRef) Self {
         return Self{
             .ally = ally,
-            .text = text,
-            .tokens = Tokenizer.init(text),
+            .file = file,
+            .tokens = Tokenizer.init(registry.get(file).text),
         };
     }
 
@@ -37,6 +38,10 @@ const Context = struct {
         _ = ally;
 
         // stub
+    }
+
+    fn getText(self: *const Self) []const u8 {
+        return registry.get(self.file).text;
     }
 
     fn next(self: *Self) Tokenizer.Error!?Token {
@@ -79,6 +84,25 @@ const Context = struct {
         const token = try self.mustNext();
         if (token.type != expects) return Error.InvalidSyntax;
         return token;
+    }
+
+    fn locFromToken(self: *const Self, tok: Token) registry.Loc {
+        return registry.Loc{
+            .file = self.file,
+            .start = @intCast(tok.index),
+            .stop = @intCast(tok.index + tok.len - 1),
+        };
+    }
+
+    /// adds an object to the gc and uses the token to mark its location
+    fn newAtom(
+        self: *const Self,
+        tok: Token,
+        init_obj: Object,
+    ) Allocator.Error!Object.Ref {
+        const ref = try gc.new(init_obj);
+        try registry.mark(ref, self.locFromToken(tok));
+        return ref;
     }
 };
 
@@ -128,19 +152,22 @@ fn parseList(ctx: *Context) Error!Object.Ref {
         list.deinit();
     }
 
-    _ = try ctx.expect(.lparen);
-
-    while (true) {
+    const lparen = try ctx.expect(.lparen);
+    const rparen = while (true) {
         const tok = try ctx.mustPeek();
         if (tok.type == .rparen) {
             ctx.accept();
-            break;
+            break tok;
         }
 
         try list.append(try parseAtom(ctx));
-    }
+    };
 
-    return try gc.new(.{ .list = list.items });
+    const loc = ctx.locFromToken(lparen).to(ctx.locFromToken(rparen));
+    const ref = try gc.new(.{ .list = list.items });
+    try registry.mark(ref, loc);
+
+    return ref;
 }
 
 /// atom ::= ident | number | string | list
@@ -149,22 +176,19 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
     return switch (tok.type) {
         .ident => t: {
             ctx.accept();
-            const ident = tok.slice(ctx.text);
+            const ident = tok.slice(ctx.getText());
 
-            // since booleans are first-class values, I think it's most
-            // appropriate to treat them as first-class syntax and live in
-            // the parser (as opposed to being globally bound constants)
             if (std.mem.eql(u8, ident, "true")) {
-                break :t try gc.new(.{ .bool = true });
+                break :t try ctx.newAtom(tok, .{ .bool = true });
             } else if (std.mem.eql(u8, ident, "false")) {
-                break :t try gc.new(.{ .bool = false });
+                break :t try ctx.newAtom(tok, .{ .bool = false });
             }
 
-            break :t try gc.new(.{ .tag = ident });
+            break :t try ctx.newAtom(tok, .{ .tag = ident });
         },
         .tag => t: {
             ctx.accept();
-            const slice = tok.slice(ctx.text);
+            const slice = tok.slice(ctx.getText());
 
             // remove @ symbol
             const tag = try gc.new(.{ .tag = slice[1..] });
@@ -174,25 +198,25 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
             const quote = try gc.new(.{ .tag = "quote" });
             defer gc.deacq(quote);
 
-            break :t try gc.new(.{ .list = &.{ quote, tag } });
+            break :t try ctx.newAtom(tok, .{ .list = &.{ quote, tag } });
         },
         .number => t: {
             ctx.accept();
-            const num_str = tok.slice(ctx.text);
+            const num_str = tok.slice(ctx.getText());
             const num = std.fmt.parseInt(i64, num_str, 10) catch {
                 return Error.InvalidNumber;
             };
 
-            break :t try gc.new(.{ .int = num });
+            break :t try ctx.newAtom(tok, .{ .int = num });
         },
         .string => t: {
             ctx.accept();
-            const slice = tok.slice(ctx.text);
+            const slice = tok.slice(ctx.getText());
 
             const parsed = try parseString(ctx.ally, slice);
             defer ctx.ally.free(parsed);
 
-            break :t try gc.new(.{ .string = parsed });
+            break :t try ctx.newAtom(tok, .{ .string = parsed });
         },
         .lparen => try parseList(ctx),
         .rparen => Error.InvalidSyntax,
@@ -211,8 +235,13 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
 ///   very cool for its homoiconic properties)
 /// - store errors/warnings as they are generated in a cache inside context,
 ///   the caller would then be responsible for checking this
-pub fn parse(ally: Allocator, text: []const u8) Error!Object.Ref {
-    var ctx = Context.init(ally, text);
+pub fn parse(
+    ally: Allocator,
+    filename: []const u8,
+    text: []const u8,
+) Error!Object.Ref {
+    const file = try registry.register(filename, text);
+    var ctx = Context.init(ally, file);
     defer ctx.deinit(ally);
 
     return try parseAtom(&ctx);

@@ -6,6 +6,7 @@ const test_options = @import("test_options");
 const std = @import("std");
 const stderr = std.io.getStdErr().writer();
 const gc = @import("gc.zig");
+const registry = @import("registry.zig");
 const parser = @import("parser.zig");
 const lower = @import("lower.zig");
 const vm = @import("vm.zig");
@@ -19,6 +20,7 @@ pub fn init() error{}!void {
 }
 
 pub fn deinit() void {
+    registry.deinit();
     gc.deinit();
     _ = gpa.deinit();
 
@@ -69,8 +71,8 @@ pub fn eval(code: Object.Ref) EvalError!Object.Ref {
 }
 
 /// evaluate a program starting from text
-pub fn exec(program: []const u8) ExecError!Object.Ref {
-    const code = try parser.parse(ally, program);
+pub fn exec(name: []const u8, program: []const u8) ExecError!Object.Ref {
+    const code = try parser.parse(ally, name, program);
     defer gc.deacq(code);
 
     return try eval(code);

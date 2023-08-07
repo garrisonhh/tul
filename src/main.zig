@@ -1,3 +1,5 @@
+//! contains entry point for tul
+
 const builtin = @import("builtin");
 const test_options = @import("test_options");
 const std = @import("std");
@@ -7,6 +9,7 @@ const com = @import("common");
 const gc = @import("gc.zig");
 const pipes = @import("pipes.zig");
 const Object = @import("object.zig").Object;
+const registry = @import("registry.zig");
 
 pub fn main() !void {
     try pipes.init();
@@ -17,7 +20,7 @@ pub fn main() !void {
         \\
     ;
 
-    const out = try pipes.exec(code);
+    const out = try pipes.exec("main", code);
     defer gc.deacq(out);
 
     try stdout.print("{}\n", .{gc.get(out)});
@@ -38,9 +41,9 @@ const TestCaseError =
 
 /// a test case; both inputs should match
 fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
-    const exp = try pipes.exec(expected);
+    const exp = try pipes.exec("test-expected", expected);
     defer gc.deacq(exp);
-    const got = try pipes.exec(actual);
+    const got = try pipes.exec("test-actual", actual);
     defer gc.deacq(got);
 
     // check for equality
@@ -81,6 +84,8 @@ fn runTestSet(set: []const tests.Test) TestCaseError!void {
             try stderr.print("test failed with error: {s}", .{@errorName(e)});
             return e;
         };
+
+        registry.deinit();
 
         if (gc.allocated() > 0) {
             try stderr.print("unreleased memory after test:\n", .{});
