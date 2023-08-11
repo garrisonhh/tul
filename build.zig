@@ -8,20 +8,26 @@ pub fn build(b: *std.Build) void {
     const common = b.createModule(.{
         .source_file = .{ .path = "lib/common/common.zig" },
     });
+    const tul = b.addModule("tul", .{
+        .source_file = .{ .path = "src/tul.zig" },
+        .dependencies = &.{
+            .{ .name = "common", .module = common },
+        },
+    });
 
-    // exe
-    const exe = b.addExecutable(.{
+    // repl
+    const repl = b.addExecutable(.{
         .name = "tul",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/repl.zig" },
         .target = target,
         .optimize = optimize,
     });
 
-    exe.addModule("common", common);
-    b.installArtifact(exe);
+    repl.addModule("tul", tul);
+    b.installArtifact(repl);
 
     // run cmd
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd = b.addRunArtifact(repl);
     run_cmd.step.dependOn(b.getInstallStep());
 
     if (b.args) |args| {
@@ -32,23 +38,13 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     // testing
-    const verbose_tests = b.option(
-        bool,
-        "verbose-tests",
-        "make tul tests always generate output",
-    ) orelse false;
-
-    const test_options = b.addOptions();
-    test_options.addOption(bool, "verbose", verbose_tests);
-
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/tests.zig" },
         .target = target,
         .optimize = optimize,
     });
 
-    unit_tests.addModule("common", common);
-    unit_tests.addOptions("test_options", test_options);
+    unit_tests.addModule("tul", tul);
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "run unit tests");

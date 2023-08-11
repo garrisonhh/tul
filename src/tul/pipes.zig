@@ -2,15 +2,14 @@
 //! of the codebase
 
 const builtin = @import("builtin");
-const test_options = @import("test_options");
 const std = @import("std");
 const stderr = std.io.getStdErr().writer();
 const gc = @import("gc.zig");
 const registry = @import("registry.zig");
-const parser = @import("parser.zig");
-const lower = @import("lower.zig");
-const vm = @import("vm.zig");
 const Object = @import("object.zig").Object;
+const parsing = @import("parser.zig");
+const lowering = @import("lower.zig");
+const vm = @import("vm.zig");
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const ally = gpa.allocator();
@@ -30,15 +29,15 @@ pub fn deinit() void {
     }
 }
 
-pub const EvalError = lower.Error || vm.PipelineError;
-pub const ExecError = parser.Error || EvalError;
+pub const EvalError = lowering.Error || vm.PipelineError;
+pub const ExecError = parsing.Error || EvalError;
 
 pub fn evalFunction(
     arglist: Object.Ref,
     code: Object.Ref,
-) lower.Error!Object.Ref {
+) lowering.Error!Object.Ref {
     // make args
-    var args = lower.Args{};
+    var args = lowering.Args{};
     defer args.deinit(ally);
 
     const list = gc.get(arglist).list;
@@ -48,31 +47,19 @@ pub fn evalFunction(
     }
 
     // lower
-    const func = try lower.lower(&args, code);
-
-    if (builtin.is_test and test_options.verbose) {
-        stderr.print("[lowered function bytecode]\n", .{}) catch {};
-        gc.get(func).@"fn".display(stderr) catch {};
-    }
-
-    return func;
+    return try lowering.lower(&args, code);
 }
 
 pub fn eval(code: Object.Ref) EvalError!Object.Ref {
-    const func = try lower.lower(null, code);
+    const func = try lowering.lower(null, code);
     defer gc.deacq(func);
-
-    if (builtin.is_test and test_options.verbose) {
-        stderr.print("[evaluating bytecode]\n", .{}) catch {};
-        gc.get(func).@"fn".display(stderr) catch {};
-    }
 
     return try vm.run(func);
 }
 
 /// evaluate a program starting from text
 pub fn exec(name: []const u8, program: []const u8) ExecError!Object.Ref {
-    const code = try parser.parse(ally, name, program);
+    const code = try parsing.parse(ally, name, program);
     defer gc.deacq(code);
 
     return try eval(code);

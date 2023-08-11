@@ -1,53 +1,23 @@
-//! contains entry point for tul
+//! testing for tul.
 
-const builtin = @import("builtin");
-const test_options = @import("test_options");
 const std = @import("std");
 const stderr = std.io.getStdErr().writer();
-const stdout = std.io.getStdOut().writer();
-const com = @import("common");
-const gc = @import("gc.zig");
-const pipes = @import("pipes.zig");
-const Object = @import("object.zig").Object;
-const registry = @import("registry.zig");
-
-pub fn main() !void {
-    try pipes.init();
-    defer pipes.deinit();
-
-    const code =
-        \\((fn (a) a) 1)
-        \\
-    ;
-
-    const out = try pipes.exec("main", code);
-    defer gc.deacq(out);
-
-    try stdout.print("{}\n", .{gc.get(out)});
-}
-
-// testing =====================================================================
-
-comptime {
-    if (builtin.is_test) {
-        std.testing.refAllDeclsRecursive(@This());
-    }
-}
+const tul = @import("tul");
 
 const TestCaseError =
-    pipes.ExecError ||
+    tul.ExecError ||
     @TypeOf(stderr).Error ||
     error{ TestFailure, UnreleasedMemory };
 
 /// a test case; both inputs should match
 fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
-    const exp = try pipes.exec("test-expected", expected);
-    defer gc.deacq(exp);
-    const got = try pipes.exec("test-actual", actual);
-    defer gc.deacq(got);
+    const exp = try tul.exec("test-expected", expected);
+    defer tul.deacq(exp);
+    const got = try tul.exec("test-actual", actual);
+    defer tul.deacq(got);
 
     // check for equality
-    if (!Object.eql(exp, got)) {
+    if (!tul.Object.eql(exp, got)) {
         try stderr.print(
             \\[actual input]
             \\{s}
@@ -60,21 +30,10 @@ fn runTest(expected: []const u8, actual: []const u8) TestCaseError!void {
             \\{}
             \\
         ,
-            .{ actual, gc.get(got), expected, gc.get(exp) },
+            .{ actual, tul.get(got), expected, tul.get(exp) },
         );
 
         return TestCaseError.TestFailure;
-    } else if (test_options.verbose) {
-        try stderr.print(
-            \\[input]
-            \\{s}
-            \\[output]
-            \\{s}
-            \\
-            \\
-        ,
-            .{ actual, gc.get(got) },
-        );
     }
 }
 
@@ -85,11 +44,11 @@ fn runTestSet(set: []const tests.Test) TestCaseError!void {
             return e;
         };
 
-        registry.deinit();
+        tul.registry.deinit();
 
-        if (gc.allocated() > 0) {
+        if (tul.gc.allocated() > 0) {
             try stderr.print("unreleased memory after test:\n", .{});
-            gc.inspectMemory();
+            tul.gc.inspectMemory();
 
             return TestCaseError.UnreleasedMemory;
         }
@@ -131,7 +90,7 @@ const tests = struct {
         ,
     }) ++ selfEvalSet(&b: {
         // builtins
-        const values = std.enums.values(Object.Builtin);
+        const values = std.enums.values(tul.Object.Builtin);
 
         var arr: [values.len][]const u8 = undefined;
         for (values, 0..) |b, i| {
@@ -203,8 +162,8 @@ const tests = struct {
 };
 
 test "tul" {
-    try pipes.init();
-    defer pipes.deinit();
+    try tul.init();
+    defer tul.deinit();
 
     try runTestSet(&tests.literals);
     try runTestSet(&tests.operators);
