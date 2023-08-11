@@ -12,11 +12,10 @@ pub const Inst = enum(u8) {
         const Input = union(enum) {
             /// takes some number of values
             pops: usize,
-            /// takes `consumed` values
+            /// read consumed bytes as int N and pop N values
             consumed,
         };
 
-        /// number of refs popped
         inputs: Input,
         /// number of refs pushed
         outputs: usize,
