@@ -1,9 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const gc = @import("gc.zig");
-const bc = @import("bytecode.zig");
+const tul = @import("tul.zig");
+const bc = tul.bc;
 const Builder = bc.Builder;
-const Object = @import("object.zig").Object;
+const Object = tul.Object;
 
 const LowerError = error{
     BadArity,
@@ -118,8 +118,8 @@ fn lowerAppliedBuiltin(
         .map => {
             if (args.len % 2 != 0) return LowerError.BadArity;
 
-            const empty_map = try gc.put(.{ .map = .{} });
-            defer gc.deacq(empty_map);
+            const empty_map = try tul.put(.{ .map = .{} });
+            defer tul.deacq(empty_map);
             try bob.loadConst(empty_map);
 
             var i: usize = 0;
@@ -160,7 +160,7 @@ fn lowerApplication(
     }
 
     // function call
-    const applied = gc.get(refs[0]);
+    const applied = tul.get(refs[0]);
     const args = refs[1..];
 
     // builtins are a special case
@@ -180,8 +180,8 @@ fn lowerApplication(
 fn lowerValueIdent(bob: *Builder, ident: []const u8) Error!void {
     if (Object.Builtin.fromName(ident)) |b| {
         // builtins read as values evaluate to themselves
-        const ref = try gc.new(.{ .builtin = b });
-        defer gc.deacq(ref);
+        const ref = try tul.new(.{ .builtin = b });
+        defer tul.deacq(ref);
         try bob.loadConst(ref);
     } else if (bob.hasArg(ident)) {
         // load an arg
@@ -198,7 +198,7 @@ fn lowerValues(bob: *Builder, refs: []const Object.Ref) Error!void {
 
 /// lower a ref being read as a value
 fn lowerValue(bob: *Builder, ref: Object.Ref) Error!void {
-    switch (gc.get(ref).*) {
+    switch (tul.get(ref).*) {
         .bool,
         .int,
         .string,
@@ -216,11 +216,11 @@ pub const Args = Builder.Args;
 /// lower some code to an executable function
 pub fn lower(args: ?*const Args, code: Object.Ref) Error!Object.Ref {
     const args_or_default: *const Args = args orelse &.{};
-    var bob = Builder.init(gc.ally, args_or_default);
+    var bob = Builder.init(tul.gc.ally, args_or_default);
     errdefer bob.deinit();
 
     try lowerValue(&bob, code);
 
     const function = try bob.build();
-    return gc.put(.{ .@"fn" = function });
+    return tul.put(.{ .@"fn" = function });
 }

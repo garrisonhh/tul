@@ -1,13 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const gc = @import("../gc.zig");
-const Object = @import("../object.zig").Object;
-const bc = @import("../bytecode.zig");
+const tul = @import("../tul.zig");
+const Object = tul.Object;
+const bc = tul.bc;
 const Inst = bc.Inst;
 
 const Self = @This();
 
-/// gc tracked values
+/// tul tracked values
 /// TODO store these more globally, intern them with Object.HashMap
 consts: []const Object.Ref,
 /// bytecode
@@ -18,14 +18,14 @@ param_count: usize,
 stack_size: usize,
 
 pub fn deinit(self: Self, ally: Allocator) void {
-    gc.deacqAll(self.consts);
+    tul.deacqAll(self.consts);
     ally.free(self.consts);
     ally.free(self.code);
 }
 
 pub fn clone(self: Self, ally: Allocator) Allocator.Error!Self {
     const consts = try ally.dupe(Object.Ref, self.consts);
-    gc.acqAll(consts);
+    tul.acqAll(consts);
     const code = try ally.dupe(u8, self.code);
 
     return Self{
@@ -51,7 +51,7 @@ pub fn display(
 
         if (inst == .load_const) {
             const ref = self.consts[consumed];
-            try writer.print("{}", .{gc.get(ref)});
+            try writer.print("{}", .{tul.get(ref)});
         } else if (inst.meta().consumes > 0) {
             try writer.print("{d}", .{consumed});
         }

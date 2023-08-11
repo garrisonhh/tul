@@ -1,10 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const gc = @import("gc.zig");
-const registry = @import("registry.zig");
-const Object = @import("object.zig").Object;
-const Tokenizer = @import("parser/tokenizer.zig");
+const tul = @import("tul.zig");
+const registry = tul.registry;
+const Object = tul.Object;
+const Tokenizer = @import("parsing/tokenizer.zig");
 const Token = Tokenizer.Token;
 
 const ParseError = error{
@@ -94,13 +94,13 @@ const Context = struct {
         };
     }
 
-    /// adds an object to the gc and uses the token to mark its location
+    /// adds an object to the tul and uses the token to mark its location
     fn newAtom(
         self: *const Self,
         tok: Token,
         init_obj: Object,
     ) Allocator.Error!Object.Ref {
-        const ref = try gc.new(init_obj);
+        const ref = try tul.new(init_obj);
         try registry.mark(ref, self.locFromToken(tok));
         return ref;
     }
@@ -148,7 +148,7 @@ fn parseString(ally: Allocator, unescaped_str: []const u8) Error![]const u8 {
 fn parseList(ctx: *Context) Error!Object.Ref {
     var list = std.ArrayList(Object.Ref).init(ctx.ally);
     defer {
-        gc.deacqAll(list.items);
+        tul.deacqAll(list.items);
         list.deinit();
     }
 
@@ -164,7 +164,7 @@ fn parseList(ctx: *Context) Error!Object.Ref {
     };
 
     const loc = ctx.locFromToken(lparen).to(ctx.locFromToken(rparen));
-    const ref = try gc.new(.{ .list = list.items });
+    const ref = try tul.new(.{ .list = list.items });
     try registry.mark(ref, loc);
 
     return ref;
@@ -191,12 +191,12 @@ fn parseAtom(ctx: *Context) Error!Object.Ref {
             const slice = tok.slice(ctx.getText());
 
             // remove @ symbol
-            const tag = try gc.new(.{ .tag = slice[1..] });
-            defer gc.deacq(tag);
+            const tag = try tul.new(.{ .tag = slice[1..] });
+            defer tul.deacq(tag);
 
             // quote the tag
-            const quote = try gc.new(.{ .tag = "quote" });
-            defer gc.deacq(quote);
+            const quote = try tul.new(.{ .tag = "quote" });
+            defer tul.deacq(quote);
 
             break :t try ctx.newAtom(tok, .{ .list = &.{ quote, tag } });
         },

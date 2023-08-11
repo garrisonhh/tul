@@ -6,9 +6,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const Object = @import("../object.zig").Object;
-const gc = @import("../gc.zig");
-const bc = @import("../bytecode.zig");
+const tul = @import("../tul.zig");
+const Object = tul.Object;
+const bc = tul.bc;
 const Inst = bc.Inst;
 const Function = bc.Function;
 const AddressInt = bc.AddressInt;
@@ -40,7 +40,7 @@ pub fn init(ally: Allocator, args: *const Args) Self {
 }
 
 pub fn deinit(self: *Self) void {
-    gc.deacqAll(self.consts.items);
+    tul.deacqAll(self.consts.items);
     self.consts.deinit(self.ally);
     self.code.deinit(self.ally);
     self.backrefs.deinit(self.ally);
@@ -91,7 +91,7 @@ pub fn loadArg(self: *Self, ident: []const u8) Allocator.Error!void {
 
 /// stores and acqs a ref to the builder, returns const index
 fn addConst(self: *Self, ref: Object.Ref) Allocator.Error!u32 {
-    gc.acq(ref);
+    tul.acq(ref);
     const index: u32 = @intCast(self.consts.items.len);
     try self.consts.append(self.ally, ref);
     return index;

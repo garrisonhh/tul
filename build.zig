@@ -8,7 +8,13 @@ pub fn build(b: *std.Build) void {
     const common = b.createModule(.{
         .source_file = .{ .path = "lib/common/common.zig" },
     });
-    const tul = b.addModule("tul", .{
+    const tulInternal = b.createModule(.{
+        .source_file = .{ .path = "src/tul/tul.zig" },
+        .dependencies = &.{
+            .{ .name = "common", .module = common },
+        },
+    });
+    const tulExternal = b.addModule("tul", .{
         .source_file = .{ .path = "src/tul.zig" },
         .dependencies = &.{
             .{ .name = "common", .module = common },
@@ -23,7 +29,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    repl.addModule("tul", tul);
+    repl.addModule("tul", tulInternal);
     b.installArtifact(repl);
 
     // run cmd
@@ -44,7 +50,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    unit_tests.addModule("tul", tul);
+    unit_tests.addModule("tul", tulExternal);
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "run unit tests");

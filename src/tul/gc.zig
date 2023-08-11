@@ -1,11 +1,10 @@
 const builtin = @import("builtin");
-const test_options = @import("test_options");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const Object = @import("object.zig").Object;
-const bc = @import("bytecode.zig");
-const in_debug = @import("builtin").mode == .Debug;
+const tul = @import("tul.zig");
+const Object = tul.Object;
+const bc = tul.bc;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 /// use this responsibly (only for memory getting directly put on gc)

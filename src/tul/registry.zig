@@ -4,8 +4,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const gc = @import("gc.zig");
-const Object = @import("object.zig").Object;
+const tul = @import("tul.zig");
+const Object = tul.Object;
 const formatters = @import("formatters.zig");
 
 pub const Loc = struct {
@@ -114,10 +114,10 @@ const ally = gpa.allocator();
 var files = FileMap{};
 var locs = std.AutoHashMapUnmanaged(Object.Ref, Loc){};
 
-/// must be called before gc.deinit()
+/// must be called before tul.deinit()
 pub fn deinit() void {
     var refs = locs.keyIterator();
-    while (refs.next()) |ref| gc.deacq(ref.*);
+    while (refs.next()) |ref| tul.deacq(ref.*);
 
     var file_iter = files.iterator();
     while (file_iter.next()) |file| {
@@ -152,7 +152,7 @@ pub fn get(fr: FileRef) *const File {
 /// add an object's source location to the registry
 pub fn mark(ref: Object.Ref, loc: Loc) Allocator.Error!void {
     try locs.putNoClobber(ally, ref, loc);
-    gc.acq(ref);
+    tul.acq(ref);
 }
 
 /// attempt to retrieve a source location for an object
@@ -166,7 +166,7 @@ pub fn inspectLocations() void {
     while (iter.next()) |entry| {
         std.debug.print(
             "[{}]\n{}\n",
-            .{ entry.value_ptr.fmt(), gc.get(entry.key_ptr.*) },
+            .{ entry.value_ptr.fmt(), tul.get(entry.key_ptr.*) },
         );
     }
 }

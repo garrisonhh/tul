@@ -1,4 +1,4 @@
-//! root module for tul. all the stuff you need to access from an embedding
+//! external module for tul. all the stuff you need to access from an embedding
 //! perspective.
 
 pub usingnamespace @import("tul/pipes.zig");
@@ -14,7 +14,3 @@ pub const acq = gc.acq;
 pub const deacq = gc.deacq;
 pub const acqAll = gc.acqAll;
 pub const deacqAll = gc.deacqAll;
-
-comptime {
-    @import("std").testing.refAllDecls(@This());
-}

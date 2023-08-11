@@ -1,10 +1,9 @@
 const std = @import("std");
 const fmt = std.fmt;
-const Object = @import("object.zig").Object;
-const gc = @import("gc.zig");
+const tul = @import("tul.zig");
 
 pub fn formatObject(
-    obj: *const Object,
+    obj: *const tul.Object,
     comptime _: []const u8,
     _: fmt.FormatOptions,
     writer: anytype,
@@ -19,7 +18,7 @@ pub fn formatObject(
             try writer.writeAll("(");
             for (refs, 0..) |ref, i| {
                 if (i > 0) try writer.writeAll(" ");
-                try writer.print("{}", .{gc.get(ref)});
+                try writer.print("{}", .{tul.get(ref)});
             }
             try writer.writeAll(")");
         },
@@ -31,8 +30,8 @@ pub fn formatObject(
             while (entries.next()) |entry| : (i += 1) {
                 if (i > 0) try writer.writeAll(", ");
                 try writer.print("{}: {}", .{
-                    gc.get(entry.key_ptr.*),
-                    gc.get(entry.value_ptr.*),
+                    tul.get(entry.key_ptr.*),
+                    tul.get(entry.value_ptr.*),
                 });
             }
 

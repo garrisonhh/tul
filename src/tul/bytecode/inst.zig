@@ -1,5 +1,5 @@
 const std = @import("std");
-const bc = @import("../bytecode.zig");
+const bc = @import("../tul.zig").bc;
 const AddressInt = bc.AddressInt;
 
 /// an atomic stack instruction

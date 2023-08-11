@@ -1,8 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const gc = @import("gc.zig");
-const bc = @import("bytecode.zig");
+const tul = @import("tul.zig");
 const formatObject = @import("formatters.zig").formatObject;
 
 /// canonical tul object
@@ -96,7 +95,7 @@ pub const Object = union(enum) {
     tag: []const u8,
     list: []const Ref,
     map: HashMapUnmanaged(Ref),
-    @"fn": bc.Function,
+    @"fn": tul.bc.Function,
 
     pub const format = formatObject;
 
@@ -105,14 +104,14 @@ pub const Object = union(enum) {
             .bool, .int, .builtin => {},
             .string, .tag => |str| ally.free(str),
             .list => |refs| {
-                gc.deacqAll(refs);
+                tul.deacqAll(refs);
                 ally.free(refs);
             },
             .map => |*map| {
                 var entries = map.iterator();
                 while (entries.next()) |entry| {
-                    gc.deacq(entry.key_ptr.*);
-                    gc.deacq(entry.value_ptr.*);
+                    tul.deacq(entry.key_ptr.*);
+                    tul.deacq(entry.value_ptr.*);
                 }
 
                 map.deinit(ally);
@@ -134,15 +133,15 @@ pub const Object = union(enum) {
             // deep dupe (shallow dupe + acq everything)
             .list => |*refs| {
                 refs.* = try ally.dupe(Ref, refs.*);
-                gc.acqAll(refs.*);
+                tul.acqAll(refs.*);
             },
             .map => |*map| {
                 map.* = try map.clone(ally);
 
                 var entries = map.iterator();
                 while (entries.next()) |entry| {
-                    gc.deacq(entry.key_ptr.*);
-                    gc.deacq(entry.value_ptr.*);
+                    tul.deacq(entry.key_ptr.*);
+                    tul.deacq(entry.value_ptr.*);
                 }
             },
             .@"fn" => |*f| {
@@ -155,8 +154,8 @@ pub const Object = union(enum) {
 
     /// deep structural equality for two refs
     pub fn eql(ref: Ref, other: Ref) bool {
-        const this = gc.get(ref);
-        const that = gc.get(other);
+        const this = tul.get(ref);
+        const that = tul.get(other);
 
         if (@as(Tag, this.*) != @as(Tag, that.*)) {
             return false;
@@ -250,7 +249,7 @@ pub const Object = union(enum) {
     /// hash any ref
     pub fn hash(hasher: *Hasher, ref: Ref) void {
         const b = std.mem.asBytes;
-        const obj = gc.get(ref);
+        const obj = tul.get(ref);
 
         hasher.update(b(&@as(Tag, obj.*)));
 
@@ -308,12 +307,12 @@ test "hashmap" {
     // put objects in mem and into hashmap
     var refs: [inits.len]Object.Ref = undefined;
     for (inits, 0..) |obj, i| {
-        const ref = try gc.new(obj);
+        const ref = try tul.new(obj);
 
         refs[i] = ref;
         try map.put(ref, i);
     }
-    defer gc.deacqAll(&refs);
+    defer tul.deacqAll(&refs);
 
     // check they are retrievable with the same ref
     for (refs, 0..) |ref, index| {
@@ -326,8 +325,8 @@ test "hashmap" {
 
     // attempt to retrieve each value using different refs
     for (inits, 0..) |obj, i| {
-        const t = try gc.new(obj);
-        defer gc.deacq(t);
+        const t = try tul.new(obj);
+        defer tul.deacq(t);
 
         const got = map.get(t) orelse {
             return error.TestFailure;
