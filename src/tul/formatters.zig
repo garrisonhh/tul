@@ -1,6 +1,6 @@
 const std = @import("std");
 const fmt = std.fmt;
-const tul = @import("tul.zig");
+const tul = @import("tul");
 
 pub fn formatObject(
     obj: *const tul.Object,

@@ -1,8 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const tul = @import("tul.zig");
-const formatObject = @import("formatters.zig").formatObject;
+const tul = @import("tul");
 
 /// canonical tul object
 ///
@@ -97,7 +96,7 @@ pub const Object = union(enum) {
     map: HashMapUnmanaged(Ref),
     @"fn": tul.bc.Function,
 
-    pub const format = formatObject;
+    pub const format = tul.fmt.formatObject;
 
     pub fn deinit(self: *Self, ally: Allocator) void {
         switch (self.*) {

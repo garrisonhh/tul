@@ -14,10 +14,13 @@ pub fn build(b: *std.Build) void {
             .{ .name = "common", .module = common },
         },
     });
+    tulInternal.dependencies.put("tul", tulInternal) catch @panic("OOM");
+
     const tulExternal = b.addModule("tul", .{
         .source_file = .{ .path = "src/tul.zig" },
         .dependencies = &.{
             .{ .name = "common", .module = common },
+            .{ .name = "tul", .module = tulInternal },
         },
     });
 

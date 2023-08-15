@@ -2,7 +2,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const tul = @import("tul.zig");
+const tul = @import("tul");
 const Object = tul.Object;
 const bc = tul.bc;
 

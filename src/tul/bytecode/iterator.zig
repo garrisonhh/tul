@@ -1,6 +1,6 @@
 const std = @import("std");
 const com = @import("common");
-const bc = @import("../tul.zig").bc;
+const bc = @import("tul").bc;
 const Inst = bc.Inst;
 
 const Self = @This();

@@ -1,16 +1,19 @@
 //! external module for tul. all the stuff you need to access from an embedding
 //! perspective.
 
-pub usingnamespace @import("tul/pipes.zig");
-pub const registry = @import("tul/registry.zig");
-pub const Object = @import("tul/object.zig").Object;
-pub const gc = @import("tul/gc.zig");
+const tul = @import("tul");
+
+pub const pipes = tul.pipes;
+pub usingnamespace pipes;
+pub const registry = tul.registry;
+pub const Object = tul.Object;
+pub const gc = tul.gc;
 
 // gc primitives
-pub const new = gc.new;
-pub const put = gc.put;
-pub const get = gc.get;
-pub const acq = gc.acq;
-pub const deacq = gc.deacq;
-pub const acqAll = gc.acqAll;
-pub const deacqAll = gc.deacqAll;
+pub const new = tul.new;
+pub const put = tul.put;
+pub const get = tul.get;
+pub const acq = tul.acq;
+pub const deacq = tul.deacq;
+pub const acqAll = tul.acqAll;
+pub const deacqAll = tul.deacqAll;

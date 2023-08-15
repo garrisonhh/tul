@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const tul = @import("tul.zig");
+const tul = @import("tul");
 const bc = tul.bc;
 const Builder = bc.Builder;
 const Object = tul.Object;

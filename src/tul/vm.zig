@@ -1,13 +1,11 @@
 const builtin = @import("builtin");
-const is_debug = builtin.mode == .Debug;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const gc = @import("gc.zig");
-const pipes = @import("pipes.zig");
-const bc = @import("bytecode.zig");
+const tul = @import("tul");
+const bc = tul.bc;
 const Function = bc.Function;
 const Inst = bc.Inst;
-const Object = @import("object.zig").Object;
+const Object = tul.Object;
 
 /// context for function execution
 pub const Frame = struct {
@@ -20,8 +18,8 @@ pub const Frame = struct {
     iter: bc.Iterator,
 
     pub fn init(ally: Allocator, func_ref: Object.Ref) Allocator.Error!Self {
-        gc.acq(func_ref);
-        const func = &gc.get(func_ref).@"fn";
+        tul.acq(func_ref);
+        const func = &tul.get(func_ref).@"fn";
         return Self{
             .func_ref = func_ref,
             .func = func,
@@ -31,10 +29,15 @@ pub const Frame = struct {
     }
 
     pub fn deinit(self: *Self, ally: Allocator) void {
-        gc.deacq(self.func_ref);
+        tul.deacq(self.func_ref);
         // params may be left over on the stack when this terminates
-        gc.deacqAll(self.stack.items);
+        tul.deacqAll(self.stack.items);
         self.stack.deinit(ally);
+    }
+
+    /// ensure stack has `num_items` items
+    fn assertStack(self: Self, num_items: usize) void {
+        std.debug.assert(self.stack.items.len >= num_items);
     }
 
     /// use code iterator through this
@@ -48,12 +51,6 @@ pub const Frame = struct {
 
     pub fn pushAll(self: *Self, refs: []const Object.Ref) void {
         for (refs) |ref| self.push(ref);
-    }
-
-    fn assertStack(self: Self, num_items: usize) void {
-        if (is_debug and self.stack.items.len < num_items) {
-            @panic("stack frame underflow :(");
-        }
     }
 
     pub fn pop(self: *Self) Object.Ref {
@@ -150,7 +147,7 @@ const Process = struct {
 
 /// needs to exist to prevent dependency loop between vm.Error and EvalError
 pub const PipelineError = Allocator.Error || bc.Iterator.Error;
-pub const Error = PipelineError || pipes.EvalError;
+pub const Error = PipelineError || tul.EvalError;
 
 fn execInst(
     proc: *Process,
@@ -166,44 +163,44 @@ fn execInst(
 
         .load_const => {
             const ref = func.consts[consumed];
-            gc.acq(ref);
+            tul.acq(ref);
             frame.push(ref);
         },
         .load_abs => {
             const ref = frame.getAbs(consumed);
-            gc.acq(ref);
+            tul.acq(ref);
             frame.push(ref);
         },
         .inspect => {
-            const obj = gc.get(frame.peek());
+            const obj = tul.get(frame.peek());
             std.debug.print("[inspect] {}\n", .{obj});
         },
         .eval => {
             const code = frame.pop();
-            defer gc.deacq(code);
-            frame.push(try pipes.eval(code));
+            defer tul.deacq(code);
+            frame.push(try tul.eval(code));
         },
         .@"fn" => {
             const refs = frame.popArray(2);
-            defer gc.deacqAll(&refs);
+            defer tul.deacqAll(&refs);
 
             const args = refs[0];
             const body = refs[1];
 
-            frame.push(try pipes.evalFunction(args, body));
+            frame.push(try tul.evalFunction(args, body));
         },
 
         // control flow
         .call => {
-            const refs = try frame.popSliceAlloc(gc.ally, consumed);
-            defer gc.ally.free(refs);
+            const refs = try frame.popSliceAlloc(tul.gc.ally, consumed);
+            defer tul.gc.ally.free(refs);
 
             const app = refs[0];
-            defer gc.deacq(app);
+            defer tul.deacq(app);
             // arg ownership is passed over to called function
             const args = refs[1..];
 
-            _ = try proc.call(gc.ally, app, args);
+            _ = try proc.call(tul.gc.ally, app, args);
         },
         .jump => {
             frame.jump(consumed);
@@ -211,8 +208,8 @@ fn execInst(
         .branch => {
             const cond = cond: {
                 const ref = frame.pop();
-                defer gc.deacq(ref);
-                break :cond gc.get(ref).bool;
+                defer tul.deacq(ref);
+                break :cond tul.get(ref).bool;
             };
 
             if (cond) frame.jump(consumed);
@@ -226,12 +223,12 @@ fn execInst(
         },
         .dup => {
             const top = frame.peek();
-            gc.acq(top);
+            tul.acq(top);
             frame.push(top);
         },
         .over => {
             const under = frame.peekArray(2)[0];
-            gc.acq(under);
+            tul.acq(under);
             frame.push(under);
         },
         .rot => {
@@ -243,16 +240,16 @@ fn execInst(
             frame.pushAll(&refs);
         },
         .drop => {
-            gc.deacq(frame.pop());
+            tul.deacq(frame.pop());
         },
 
         // math
         inline .add, .sub, .mul, .div, .mod => |tag| {
             const refs = frame.popArray(2);
-            defer gc.deacqAll(&refs);
+            defer tul.deacqAll(&refs);
 
-            const lhs = gc.get(refs[0]).int;
-            const rhs = gc.get(refs[1]).int;
+            const lhs = tul.get(refs[0]).int;
+            const rhs = tul.get(refs[1]).int;
 
             const val = switch (tag) {
                 .add => lhs + rhs,
@@ -263,16 +260,16 @@ fn execInst(
                 else => unreachable,
             };
 
-            frame.push(try gc.new(.{ .int = val }));
+            frame.push(try tul.new(.{ .int = val }));
         },
 
         // logic
         inline .land, .lor => |tag| {
             const refs = frame.popArray(2);
-            defer gc.deacqAll(&refs);
+            defer tul.deacqAll(&refs);
 
-            const lhs = gc.get(refs[0]).bool;
-            const rhs = gc.get(refs[1]).bool;
+            const lhs = tul.get(refs[0]).bool;
+            const rhs = tul.get(refs[1]).bool;
 
             const val = switch (tag) {
                 .land => lhs and rhs,
@@ -280,53 +277,53 @@ fn execInst(
                 else => unreachable,
             };
 
-            frame.push(try gc.new(.{ .bool = val }));
+            frame.push(try tul.new(.{ .bool = val }));
         },
         .lnot => {
             const ref = frame.pop();
-            defer gc.deacq(ref);
+            defer tul.deacq(ref);
 
-            const val = !gc.get(ref).bool;
-            frame.push(try gc.new(.{ .bool = val }));
+            const val = !tul.get(ref).bool;
+            frame.push(try tul.new(.{ .bool = val }));
         },
 
         // comparison
         .eq => {
             const refs = frame.popArray(2);
-            defer gc.deacqAll(&refs);
+            defer tul.deacqAll(&refs);
 
             const res = Object.eql(refs[0], refs[1]);
 
-            frame.push(try gc.new(.{ .bool = res }));
+            frame.push(try tul.new(.{ .bool = res }));
         },
 
         // strings/lists
         .concat => {
             const refs = frame.popArray(2);
-            defer gc.deacqAll(&refs);
+            defer tul.deacqAll(&refs);
 
-            const lhs_ref = gc.get(refs[0]);
-            const rhs_ref = gc.get(refs[1]);
+            const lhs_ref = tul.get(refs[0]);
+            const rhs_ref = tul.get(refs[1]);
 
             if (lhs_ref.* == .string) {
                 const lhs = lhs_ref.string;
                 const rhs = rhs_ref.string;
 
-                const str = try std.mem.concat(gc.ally, u8, &.{ lhs, rhs });
+                const str = try std.mem.concat(tul.gc.ally, u8, &.{ lhs, rhs });
 
-                frame.push(try gc.put(.{ .string = str }));
+                frame.push(try tul.put(.{ .string = str }));
             } else if (lhs_ref.* == .list) {
                 const lhs = lhs_ref.list;
                 const rhs = rhs_ref.list;
 
                 const list = try std.mem.concat(
-                    gc.ally,
+                    tul.gc.ally,
                     Object.Ref,
                     &.{ lhs, rhs },
                 );
-                gc.acqAll(list);
+                tul.acqAll(list);
 
-                frame.push(try gc.put(.{ .list = list }));
+                frame.push(try tul.put(.{ .list = list }));
             } else {
                 @panic("TODO runtime error; mismatched concat");
             }
@@ -335,8 +332,8 @@ fn execInst(
             // technically, this should deacq all refs when popping and then
             // reacq when placing on the list, but I think that is
             // unnecessary work
-            const list = try frame.popSliceAlloc(gc.ally, consumed);
-            frame.push(try gc.put(.{ .list = list }));
+            const list = try frame.popSliceAlloc(tul.gc.ally, consumed);
+            frame.push(try tul.put(.{ .list = list }));
         },
         .put => {
             const refs = frame.popArray(3);
@@ -346,18 +343,20 @@ fn execInst(
 
             // if there is one ref, the map can be safely mutated. otherwise,
             // a clone must be made
-            const map_out = if (gc.refCount(map_in) == 1) map_in else clone: {
-                const cloned = try gc.get(map_in).clone(gc.ally);
-                gc.deacq(map_in);
-                break :clone try gc.put(cloned);
+            const map_out = if (tul.gc.refCount(map_in) == 1) mut: {
+                break :mut map_in;
+            } else clone: {
+                const cloned = try tul.get(map_in).clone(tul.gc.ally);
+                tul.deacq(map_in);
+                break :clone try tul.put(cloned);
             };
 
             // add to this map, respecting ownership rules
-            const map = &gc.getMut(map_out).map;
-            const res = try map.getOrPut(gc.ally, key);
+            const map = &tul.gc.getMut(map_out).map;
+            const res = try map.getOrPut(tul.gc.ally, key);
             if (res.found_existing) {
-                gc.deacq(key);
-                gc.deacq(res.value_ptr.*);
+                tul.deacq(key);
+                tul.deacq(res.value_ptr.*);
             }
 
             res.value_ptr.* = value;
@@ -367,19 +366,19 @@ fn execInst(
         },
         .get => {
             const refs = frame.popArray(2);
-            defer gc.deacqAll(&refs);
+            defer tul.deacqAll(&refs);
 
             const map_ref = refs[0];
             const key = refs[1];
 
-            const map = &gc.get(map_ref).map;
+            const map = &tul.get(map_ref).map;
             if (map.get(key)) |value| {
                 // value exists
-                gc.acq(value);
+                tul.acq(value);
                 frame.push(value);
             } else {
                 // value does not exist, return a unit
-                frame.push(try gc.put(.{ .list = &.{} }));
+                frame.push(try tul.put(.{ .list = &.{} }));
             }
         },
     }
@@ -387,12 +386,12 @@ fn execInst(
 
 /// run a program on the vm (in the form of a function that takes 0 parameters)
 pub fn run(main: Object.Ref) Error!Object.Ref {
-    const func = &gc.get(main).@"fn";
+    const func = &tul.get(main).@"fn";
     std.debug.assert(func.param_count == 0);
 
     // start process
     var proc = Process{};
-    try proc.call(gc.ally, main, &.{});
+    try proc.call(tul.gc.ally, main, &.{});
 
     // main vm loop
     while (true) {
@@ -405,7 +404,7 @@ pub fn run(main: Object.Ref) Error!Object.Ref {
                 break :inst inst;
             }
 
-            const returned = proc.ret(gc.ally);
+            const returned = proc.ret(tul.gc.ally);
             if (proc.getFrame()) |next_frame| {
                 // return value to previous function
                 frame = next_frame;

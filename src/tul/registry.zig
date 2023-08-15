@@ -4,9 +4,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const tul = @import("tul.zig");
+const tul = @import("tul");
 const Object = tul.Object;
-const formatters = @import("formatters.zig");
 
 pub const Loc = struct {
     file: FileRef,
@@ -136,6 +135,17 @@ pub fn deinit() void {
     }
 }
 
+/// displays all locations to stderr for debugging purposes
+pub fn inspectLocations() void {
+    var iter = locs.iterator();
+    while (iter.next()) |entry| {
+        std.debug.print(
+            "[{}]\n{}\n",
+            .{ entry.value_ptr.fmt(), tul.get(entry.key_ptr.*) },
+        );
+    }
+}
+
 /// add a file to the registry
 pub fn register(name: []const u8, text: []const u8) Allocator.Error!FileRef {
     return try files.put(ally, File{
@@ -158,15 +168,4 @@ pub fn mark(ref: Object.Ref, loc: Loc) Allocator.Error!void {
 /// attempt to retrieve a source location for an object
 pub fn find(ref: Object.Ref) ?Loc {
     return locs.get(ref);
-}
-
-/// displays all locations to stderr for debugging purposes
-pub fn inspectLocations() void {
-    var iter = locs.iterator();
-    while (iter.next()) |entry| {
-        std.debug.print(
-            "[{}]\n{}\n",
-            .{ entry.value_ptr.fmt(), tul.get(entry.key_ptr.*) },
-        );
-    }
 }

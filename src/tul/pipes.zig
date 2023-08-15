@@ -4,7 +4,7 @@
 const builtin = @import("builtin");
 const std = @import("std");
 const stderr = std.io.getStdErr().writer();
-const tul = @import("tul.zig");
+const tul = @import("tul");
 const Object = tul.Object;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
