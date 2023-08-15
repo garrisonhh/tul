@@ -1,5 +1,10 @@
 .{
     .name = "tul",
     .version = "0.0.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .zighh = .{
+            .url = "https://github.com/garrisonhh/zighh/tarball/50a48ed0866f9543bd0b8b40bdd83cff8db2acd7",
+            .hash = "1220e7e7673f25962a1a7c41de8fed60c1ef3fee7ad895d578bee1411e6dce0d8527",
+        },
+    },
 }

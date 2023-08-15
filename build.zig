@@ -5,9 +5,8 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // libs
-    const common = b.createModule(.{
-        .source_file = .{ .path = "lib/common/common.zig" },
-    });
+    const common = b.dependency("zighh", .{}).module("common");
+
     const tulInternal = b.createModule(.{
         .source_file = .{ .path = "src/tul/tul.zig" },
         .dependencies = &.{

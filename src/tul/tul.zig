@@ -1,5 +1,11 @@
 //! internal root module.
 
+const std = @import("std");
+
+comptime {
+    std.testing.refAllDecls(@This());
+}
+
 // high level stuff
 pub const pipes = @import("pipes.zig");
 pub usingnamespace pipes;
@@ -13,9 +19,6 @@ pub const lowering = @import("lowering.zig");
 pub const bc = @import("bytecode.zig");
 pub const vm = @import("vm.zig");
 
-// implementation details
-pub const fmt = @import("formatters.zig");
-
 // gc primitives for convenience
 pub const new = gc.new;
 pub const put = gc.put;
@@ -25,6 +28,6 @@ pub const deacq = gc.deacq;
 pub const acqAll = gc.acqAll;
 pub const deacqAll = gc.deacqAll;
 
-comptime {
-    @import("std").testing.refAllDecls(@This());
-}
+// implementation details
+pub const fmt = @import("formatters.zig");
+pub const log = std.log.scoped(.tul);

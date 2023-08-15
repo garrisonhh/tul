@@ -12,3 +12,7 @@ you have two options:
 2. you can also just `$ zig build` with zig master. it is quite possible for
    this to break due to zig development, but I am not using any wacky dependency
    management stuff that would otherwise make this hard.
+
+## how 2 embed?
+
+tul exposes `tul` as a module for your `build.zig`.
