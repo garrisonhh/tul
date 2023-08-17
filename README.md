@@ -6,12 +6,8 @@ hopefully useful for simple scripting tasks.
 
 ## how 2 build?
 
-you have two options:
-
-1. `$ nix build` is consistently tested on my end..
-2. you can also just `$ zig build` with zig master. it is quite possible for
-   this to break due to zig development, but I am not using any wacky dependency
-   management stuff that would otherwise make this hard.
+`$ zig build` with zig 0.11.0, which is the current stable zig as of writing
+this.
 
 ## how 2 embed?
 

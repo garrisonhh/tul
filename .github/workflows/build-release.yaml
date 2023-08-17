@@ -12,9 +12,9 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v3
-      - name: install nix
-        uses: DeterminateSystems/nix-installer-action@v4
-      - name: run magic nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: setup zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.11.0
       - name: build tul
-        run: nix build -L .#release
+        run: zig build -Doptimize=ReleaseFast

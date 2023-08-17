@@ -1,6 +1,34 @@
 const std = @import("std");
+const stderr = std.io.getStdErr().writer();
+const builtin = @import("builtin");
 
-pub fn build(b: *std.Build) void {
+const VersionError = error{WrongVersion};
+
+fn ensureVersion() (@TypeOf(stderr).Error || VersionError)!void {
+    const req_version = std.SemanticVersion{
+        .major = 0,
+        .minor = 11,
+        .patch = 0,
+    };
+
+    // ensure version matches req_version
+    if (builtin.zig_version.order(req_version).compare(.neq)) {
+        try stderr.print(
+            "error: expected version {}, found {}\n",
+            .{ req_version, builtin.zig_version },
+        );
+        return VersionError.WrongVersion;
+    }
+}
+
+const BuildError = std.mem.Allocator.Error || @TypeOf(stderr).Error || VersionError;
+
+pub fn build(b: *std.Build) BuildError!void {
+    ensureVersion() catch |e| {
+        if (e == VersionError.WrongVersion) return;
+        return e;
+    };
+
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -13,7 +41,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "common", .module = common },
         },
     });
-    tulInternal.dependencies.put("tul", tulInternal) catch @panic("OOM");
+    try tulInternal.dependencies.put("tul", tulInternal);
 
     const tulExternal = b.addModule("tul", .{
         .source_file = .{ .path = "src/tul.zig" },
