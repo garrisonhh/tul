@@ -34,11 +34,13 @@ pub fn build(b: *std.Build) BuildError!void {
 
     // libs
     const common = b.dependency("zighh", .{}).module("common");
+    const blox = b.dependency("blox", .{}).module("blox");
 
     const tulInternal = b.createModule(.{
         .source_file = .{ .path = "src/tul/tul.zig" },
         .dependencies = &.{
             .{ .name = "common", .module = common },
+            .{ .name = "blox", .module = blox },
         },
     });
     try tulInternal.dependencies.put("tul", tulInternal);
@@ -47,6 +49,7 @@ pub fn build(b: *std.Build) BuildError!void {
         .source_file = .{ .path = "src/tul.zig" },
         .dependencies = &.{
             .{ .name = "common", .module = common },
+            .{ .name = "blox", .module = blox },
             .{ .name = "tul", .module = tulInternal },
         },
     });
@@ -85,4 +88,14 @@ pub fn build(b: *std.Build) BuildError!void {
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    // autodoc
+    const docs = b.addInstallDirectory(.{
+        .source_dir = repl.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "doc",
+    });
+
+    const install_docs = b.step("docs", "build and install autodocs");
+    install_docs.dependOn(&docs.step);
 }

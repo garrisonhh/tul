@@ -3,8 +3,12 @@
     .version = "0.0.0",
     .dependencies = .{
         .zighh = .{
-            .url = "https://github.com/garrisonhh/zighh/tarball/50a48ed0866f9543bd0b8b40bdd83cff8db2acd7",
-            .hash = "1220e7e7673f25962a1a7c41de8fed60c1ef3fee7ad895d578bee1411e6dce0d8527",
+            .url = "https://github.com/garrisonhh/zighh/tarball/4b59b5d298fc6b0e8938504640424cab38e40aab",
+            .hash = "1220b11c0494e4ac481d38602c88c0000adc6aad3b9790300964591fa08cf24dde39",
+        },
+        .blox = .{
+            .url = "https://github.com/garrisonhh/blox/tarball/e4c2cdad34088247baeae86d9fb41519a3389ac4",
+            .hash = "1220b68ead33f2de41bbcab91daed339cd18a376a21f58441a9be28d23813cc0a1bd",
         },
     },
 }
