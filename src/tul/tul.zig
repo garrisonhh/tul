@@ -18,6 +18,7 @@ pub const parsing = @import("parsing.zig");
 pub const lowering = @import("lowering.zig");
 pub const bc = @import("bytecode.zig");
 pub const vm = @import("vm.zig");
+pub const err = @import("err.zig");
 
 // gc primitives for convenience
 pub const new = gc.new;

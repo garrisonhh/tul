@@ -1,6 +1,36 @@
+//! writing std.fmt code tends to take up a shitload of space and isn't really
+//! directly relevant to the actual data structure. so this is my offshore call
+//! center.
+
 const std = @import("std");
 const fmt = std.fmt;
 const tul = @import("tul");
+const blox = @import("blox");
+
+pub fn renderErrorLevel(
+    level: tul.err.Level,
+    mason: *blox.Mason,
+) blox.Error!blox.Div {
+    const label: []const u8 = switch (level) {
+        inline .debug => |t| @tagName(t),
+        .warn => "warning",
+        .err => "error",
+    };
+
+    return mason.newPre(label, .{
+        .fg = level.color(),
+    });
+}
+
+pub fn renderErrorMessage(
+    msg: tul.err.Message,
+    mason: *blox.Mason,
+) blox.Error!blox.Div {
+    _ = msg;
+    _ = mason;
+
+    @panic("TODO");
+}
 
 pub fn formatObject(
     obj: *const tul.Object,
